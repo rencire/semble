@@ -52,6 +52,8 @@
 
       devShells = forEachSystem (pkgs: import ./nix/devShells { inherit confix pkgs; });
 
-      checks = forEachSystem (pkgs: import ./nix/checks { inherit pkgs self; });
+      checks = forEachSystem (pkgs: import ./nix/checks {
+        inherit pkgs self nixpkgs;
+      });
     };
 }

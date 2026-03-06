@@ -1,8 +1,9 @@
-{ pkgs, self }:
+{ pkgs, self, nixpkgs }:
 {
-  api-scaffold = pkgs.writeText "semble-api-scaffold" (
-    builtins.toJSON {
-      hasMkFlake = builtins.isFunction self.lib.mkFlake;
-    }
+  api = pkgs.writeText "semble-api-tests" (
+    builtins.toJSON (import ../tests {
+      sembleLib = self.lib;
+      inherit nixpkgs;
+    })
   );
 }
