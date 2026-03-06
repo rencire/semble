@@ -33,6 +33,7 @@ let
   };
 
   hostConfig = flake.nixosConfigurations.thor.config;
+  lokiConfig = flake.nixosConfigurations.loki.config;
 
   expectFailure =
     root:
@@ -51,13 +52,15 @@ let
     true;
 in
 {
-  discoveredHosts = assert (builtins.attrNames project.hostsByKey == [ "thor" ]); true;
+  discoveredHosts = assert (builtins.attrNames project.hostsByKey == [ "loki" "thor" ]); true;
   discoveredModules = assert (builtins.attrNames project.modulesByKey == [ "branding" "security.sops" ]); true;
   discoveredPresets = assert (builtins.attrNames project.presetsByKey == [ "base" "security.sopsDefault" ]); true;
   presetResolution = assert (map (preset: preset.key) resolved.presetDefs == [ "base" "security.sopsDefault" ]); true;
   moduleResolution = assert (map (moduleDef: moduleDef.key) resolved.moduleDefs == [ "branding" "security.sops" ]); true;
   hostConfigWins = assert (hostConfig.environment.variables.SEMBLE_MESSAGE == "from-host"); true;
   hostNameOrder = assert (hostConfig.networking.hostName == "thor-lab"); true;
+  defaultHostNameWins = assert (lokiConfig.networking.hostName == "loki"); true;
+  missingDefaultConfigIsEmpty = assert (lokiConfig.environment.variables.SEMBLE_MESSAGE == "from-preset"); true;
   presetValuesApply = assert (hostConfig.services.openssh.hostKeys == [ { path = "/preset/key"; type = "rsa"; } ]); true;
   upstreamInputsApply = assert (hostConfig.environment.variables.FAKE_INPUT == "enabled"); true;
   duplicatePresetFails = expectFailure duplicatePresetRoot;
