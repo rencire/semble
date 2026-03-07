@@ -46,8 +46,14 @@
     {
       overlays = import ./nix/overlays;
 
+      lib = import ./nix/lib { inherit nixpkgs; };
+
       packages = forEachSystem (pkgs: import ./nix/packages { inherit pkgs; });
 
       devShells = forEachSystem (pkgs: import ./nix/devShells { inherit confix pkgs; });
+
+      checks = forEachSystem (pkgs: import ./nix/checks {
+        inherit pkgs self nixpkgs;
+      });
     };
 }
