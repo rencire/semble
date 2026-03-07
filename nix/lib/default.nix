@@ -180,11 +180,14 @@ let
     let
       raw = assertAttrset path (import path);
       value = assertAllowedFields path [ "key" "inputs" "options" "config" ] raw;
-      key = value.key or deriveKey {
-        kind = "module";
-        inherit relativePath;
-      };
-      _ = assertString path "key" key;
+      key =
+        if value ? key then
+          assertString path "key" value.key
+        else
+          deriveKey {
+            kind = "module";
+            inherit relativePath;
+          };
       inputs = assertUniqueValues path "module input" (assertListOfStrings path "inputs" (value.inputs or [ ]));
       options = assertAttrsOrFunction path "options" (value.options or { });
       config = assertAttrsOrFunction path "config" (value.config or { });
@@ -203,11 +206,14 @@ let
     let
       raw = assertAttrset path (import path);
       value = assertAllowedFields path [ "key" "modules" "values" ] raw;
-      key = value.key or deriveKey {
-        kind = "preset";
-        inherit relativePath;
-      };
-      _ = assertString path "key" key;
+      key =
+        if value ? key then
+          assertString path "key" value.key
+        else
+          deriveKey {
+            kind = "preset";
+            inherit relativePath;
+          };
       modules = assertUniqueValues path "module selection" (assertListOfStrings path "modules" (value.modules or [ ]));
       presetValues = assertAttrset path (value.values or { });
     in
@@ -226,11 +232,14 @@ let
     let
       raw = assertAttrset path (import path);
       value = assertAllowedFields path [ "key" "presets" ] raw;
-      key = value.key or deriveKey {
-        kind = "profile";
-        inherit relativePath;
-      };
-      _ = assertString path "key" key;
+      key =
+        if value ? key then
+          assertString path "key" value.key
+        else
+          deriveKey {
+            kind = "profile";
+            inherit relativePath;
+          };
       presets = assertUniqueValues path "preset selection" (assertListOfStrings path "presets" (value.presets or [ ]));
     in
     {
