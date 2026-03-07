@@ -350,8 +350,8 @@ let
     }:
     args@{ config, ... }:
     let
-      hkPath = [ "hk" ] ++ lib.splitString "." moduleDef.key;
-      cfg = lib.attrByPath hkPath { } config;
+      namespacePath = [ "sb" ] ++ lib.splitString "." moduleDef.key;
+      cfg = lib.attrByPath namespacePath { } config;
       optionsValue =
         if builtins.isFunction moduleDef.options then
           moduleDef.options (args // { inherit cfg; })
@@ -368,7 +368,7 @@ let
         inherit inputs ref;
         file = moduleDef.file;
       }) moduleDef.inputs;
-      options = lib.setAttrByPath hkPath optionsValue;
+      options = lib.setAttrByPath namespacePath optionsValue;
       config = configValue;
     };
 

@@ -2,8 +2,8 @@
   modules = [ "security.sops" ];
 
   values = {
-    hk.security.sops.enable = true;
-    hk.security.sops.sshKeyFile = "/preset/key";
-    hk.security.sops.hostKeyType = "rsa";
+    sb.security.sops.enable = true;
+    sb.security.sops.sshKeyFile = "/preset/key";
+    sb.security.sops.hostKeyType = "rsa";
   };
 }

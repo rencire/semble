@@ -190,7 +190,7 @@ If present, the default host-local override file is
   imports = [ ./hardware-override.nix ];
 
   # Optional escape hatch for host-local overrides after preset values are applied.
-  hk.security.sops.sshKeyFile = "/persist/etc/ssh/ssh_host_ed25519_key";
+  sb.security.sops.sshKeyFile = "/persist/etc/ssh/ssh_host_ed25519_key";
 
   # Regular upstream NixOS options can also be set here directly.
   services.openssh.enable = true;
@@ -261,9 +261,9 @@ existing module options. They do not define new options.
   modules = [ "security.sops" ];
 
   values = {
-    hk.security.sops.enable = true;
-    hk.security.sops.sshKeyFile = "/etc/ssh/ssh_host_ed25519_key";
-    hk.security.sops.hostKeyType = "ed25519";
+    sb.security.sops.enable = true;
+    sb.security.sops.sshKeyFile = "/etc/ssh/ssh_host_ed25519_key";
+    sb.security.sops.hostKeyType = "ed25519";
   };
 }
 ```
