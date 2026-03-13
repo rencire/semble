@@ -1,5 +1,5 @@
 {
-  host = "thor";
+  host = "atlas";
   format = "raw";
   efiSupport = true;
 }
