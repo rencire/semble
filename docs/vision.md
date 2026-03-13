@@ -11,9 +11,11 @@ easier to understand, reuse, and evolve as they grow.
 It does that by separating concerns clearly:
 
 - Hosts that express identity and local intent
-- Profiles that express role-level composition
-- Presets that express reusable opinionated settings
+- Images that express packaging of a host into a boot artifact
+- Profiles that express broad baseline composition
+- Presets that express reusable bundles and conventional defaults
 - Modules that express option schema, behavior, and upstream integrations
+- Input module escape hatches for direct upstream composition when needed
 
 Semble is meant to keep systems readable as they grow from one machine to many.
 
@@ -36,13 +38,19 @@ Semble exists to impose a stronger structure on that problem.
 Semble models a system as a small set of composable layers:
 
 - A host that names a specific managed system
-- A profile that describes a role or responsibility
-- A preset that selects modules and provides opinionated values
+- An image that packages a host into a boot artifact
+- A profile that describes a broad baseline
+- A preset that selects modules and provides conventional values
 - A module that defines options, behavior, and required upstream imports
+- An optional input-module escape hatch for direct upstream usage
 
 This yields a clear composition flow:
 
-`host -> profiles -> presets -> modules`
+`host -> profiles -> presets -> modules -> inputs`
+
+with `image -> host` for artifact packaging.
+
+with `host -> inputModules` available only as an explicit escape hatch.
 
 The goal is not to hide Nix, but to make system structure obvious and
 enforceable.
@@ -64,10 +72,11 @@ They should not be the main place where reusable behavior is invented.
 
 Each layer should own a different kind of decision:
 
-- Hosts owning identity and host-local overrides
-- Profiles owning role composition
-- Presets owning opinionated defaults and module selection
+- Hosts owning identity, host-local overrides, and explicit composition choices
+- Profiles owning broad baseline composition
+- Presets owning reusable bundles and conventional defaults
 - Modules owning schema, behavior, and upstream integration knowledge
+- Input modules serving as temporary or host-specific direct upstream escape hatches
 
 This keeps responsibilities clear and reduces overlap.
 
@@ -101,7 +110,7 @@ Semble is:
 - A facade module system built on top of upstream module systems
 - A way to organize reusable NixOS concerns cleanly
 - A boundary between reusable abstractions and host-local intent
-- A stricter interface for assembling systems from modules, presets, and
+- A stricter interface for assembling systems from input modules, modules, presets, and
   profiles
 - An opinionated structure for organizing host configuration
 

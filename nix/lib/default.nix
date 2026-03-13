@@ -150,11 +150,13 @@ let
     }:
     let
       raw = assertAttrset path (import path);
-      value = assertAllowedFields path [ "hostName" "system" "profiles" "presets" "configFile" ] raw;
+      value = assertAllowedFields path [ "hostName" "system" "profiles" "presets" "modules" "inputModules" "configFile" ] raw;
       hostName = assertString path "hostName" (value.hostName or (fileError path "missing required field `hostName`"));
       system = assertString path "system" (value.system or (fileError path "missing required field `system`"));
       profiles = assertUniqueValues path "profile selection" (assertListOfStrings path "profiles" (value.profiles or [ ]));
       presets = assertUniqueValues path "preset selection" (assertListOfStrings path "presets" (value.presets or [ ]));
+      modules = assertUniqueValues path "module selection" (assertListOfStrings path "modules" (value.modules or [ ]));
+      inputModules = assertUniqueValues path "input module selection" (assertListOfStrings path "inputModules" (value.inputModules or [ ]));
       configFile =
         if value ? configFile then
           assertOptionalPath path "configFile" value.configFile
@@ -168,7 +170,7 @@ let
         kind = "host";
         inherit relativePath;
       };
-      inherit hostName system profiles presets configFile;
+      inherit hostName system profiles presets modules inputModules configFile;
       configFileExplicit = value ? configFile;
     };
 
@@ -205,7 +207,7 @@ let
     }:
     let
       raw = assertAttrset path (import path);
-      value = assertAllowedFields path [ "key" "modules" "values" ] raw;
+      value = assertAllowedFields path [ "key" "modules" "inputModules" "values" ] raw;
       key =
         if value ? key then
           assertString path "key" value.key
@@ -215,12 +217,13 @@ let
             inherit relativePath;
           };
       modules = assertUniqueValues path "module selection" (assertListOfStrings path "modules" (value.modules or [ ]));
+      inputModules = assertUniqueValues path "input module selection" (assertListOfStrings path "inputModules" (value.inputModules or [ ]));
       presetValues = assertAttrset path (value.values or { });
     in
     {
       file = path;
       kind = "preset";
-      inherit key modules;
+      inherit key modules inputModules;
       values = presetValues;
     };
 
@@ -246,6 +249,37 @@ let
       file = path;
       kind = "profile";
       inherit key presets;
+    };
+
+  normalizeImage =
+    {
+      path,
+      relativePath,
+    }:
+    let
+      raw = assertAttrset path (import path);
+      value = assertAllowedFields path [ "host" "format" "efiSupport" ] raw;
+      host = assertString path "host" (value.host or (fileError path "missing required field `host`"));
+      format = assertString path "format" (value.format or (fileError path "missing required field `format`"));
+      _ = assertCondition path (builtins.elem format [ "raw" ]) "field `format` must be one of: raw";
+      efiSupport =
+        if value ? efiSupport then
+          let
+            enabled = value.efiSupport;
+            __ = assertCondition path (builtins.isBool enabled) "field `efiSupport` must be a boolean";
+          in
+          enabled
+        else
+          false;
+    in
+    {
+      file = path;
+      kind = "image";
+      key = deriveKey {
+        kind = "image";
+        inherit relativePath;
+      };
+      inherit host format efiSupport;
     };
 
   discoverKind =
@@ -294,13 +328,20 @@ let
         includeFile = fileName: _: lib.hasSuffix ".nix" fileName;
         normalize = normalizeProfile;
       };
+      images = discoverKind {
+        inherit root;
+        name = "images";
+        includeFile = fileName: _: fileName == "default.nix";
+        normalize = normalizeImage;
+      };
     in
     {
-      inherit root inputs hosts modules presets profiles;
+      inherit root inputs hosts modules presets profiles images;
       hostsByKey = listToAttrsByKey hosts;
       modulesByKey = listToAttrsByKey modules;
       presetsByKey = listToAttrsByKey presets;
       profilesByKey = listToAttrsByKey profiles;
+      imagesByKey = listToAttrsByKey images;
     };
 
   requireByKey = file: kind: key: attrs:
@@ -372,6 +413,138 @@ let
       config = configValue;
     };
 
+  makeOrigin = kind: key: file: {
+    inherit kind key file;
+  };
+
+  formatOrigin = origin: "${origin.kind} `${origin.key}` (${toString origin.file})";
+
+  addResolvedItem =
+    {
+      file,
+      label,
+      itemType,
+      itemKey,
+      origin,
+      state,
+    }:
+    if builtins.hasAttr itemKey state.seen then
+      let
+        first = builtins.getAttr itemKey state.seen;
+      in
+      fileError file "duplicate ${label} `${itemKey}` via ${formatOrigin first.origin}; repeated from ${formatOrigin origin}"
+    else
+      {
+        seen = state.seen // {
+          "${itemKey}" = {
+            inherit origin;
+          };
+        };
+        ordered = state.ordered ++ [
+          {
+            key = itemKey;
+            type = itemType;
+            inherit origin;
+          }
+        ];
+      };
+
+  collectResolvedItems =
+    {
+      file,
+      label,
+      itemType,
+      selections,
+    }:
+    builtins.foldl' (
+      state: selection:
+      addResolvedItem {
+        inherit file label itemType state;
+        itemKey = selection.key;
+        origin = selection.origin;
+      }
+    ) { seen = { }; ordered = [ ]; } selections;
+
+  collectPresetSelections =
+    {
+      host,
+      profileDefs,
+    }:
+    let
+      profileSelections = lib.concatMap (
+        profile:
+        map
+          (presetKey: {
+            key = presetKey;
+            origin = makeOrigin "profile" profile.key profile.file;
+          })
+          profile.presets
+      ) profileDefs;
+      hostSelections = map
+        (presetKey: {
+          key = presetKey;
+          origin = makeOrigin "host" host.key host.file;
+        })
+        host.presets;
+    in
+    collectResolvedItems {
+      file = host.file;
+      label = "preset inclusion";
+      itemType = "preset";
+      selections = profileSelections ++ hostSelections;
+    };
+
+  collectExplicitSelections =
+    {
+      host,
+      presetDefs,
+      field,
+      label,
+      itemType,
+    }:
+    let
+      presetSelections = lib.concatMap (
+        preset:
+        map
+          (itemKey: {
+            key = itemKey;
+            origin = makeOrigin "preset" preset.key preset.file;
+          })
+          preset.${field}
+      ) presetDefs;
+      hostSelections = map
+        (itemKey: {
+          key = itemKey;
+          origin = makeOrigin "host" host.key host.file;
+        })
+        host.${field};
+    in
+    collectResolvedItems {
+      file = host.file;
+      inherit label itemType;
+      selections = presetSelections ++ hostSelections;
+    };
+
+  assertNoOverlapWithOrigins =
+    {
+      file,
+      label,
+      explicitSelections,
+      transitiveSelections,
+    }:
+    let
+      explicitByKey = lib.listToAttrs (map (selection: lib.nameValuePair selection.key selection) explicitSelections);
+      overlaps = builtins.filter (selection: builtins.hasAttr selection.key explicitByKey) transitiveSelections;
+      _ = builtins.map (
+        overlap:
+        let
+          explicit = builtins.getAttr overlap.key explicitByKey;
+        in
+        fileError file "duplicate ${label} `${overlap.key}` via ${formatOrigin explicit.origin}; repeated from ${formatOrigin overlap.origin}"
+      ) overlaps;
+    in
+    true;
+
   resolveHost =
     {
       project,
@@ -380,10 +553,38 @@ let
     let
       host = requireByKey project.root "host" key project.hostsByKey;
       profileDefs = map (profileKey: requireByKey host.file "profile" profileKey project.profilesByKey) host.profiles;
-      presetKeys = assertUniqueValues host.file "preset inclusion" ((lib.concatMap (profile: profile.presets) profileDefs) ++ host.presets);
-      presetDefs = map (presetKey: requireByKey host.file "preset" presetKey project.presetsByKey) presetKeys;
-      moduleKeys = assertUniqueValues host.file "module inclusion" (lib.concatMap (preset: preset.modules) presetDefs);
-      moduleDefs = map (moduleKey: requireByKey host.file "module" moduleKey project.modulesByKey) moduleKeys;
+      presetSelections = collectPresetSelections {
+        inherit host profileDefs;
+      };
+      presetDefs = map (selection: requireByKey host.file "preset" selection.key project.presetsByKey) presetSelections.ordered;
+      explicitModuleSelections = collectExplicitSelections {
+        inherit host presetDefs;
+        field = "modules";
+        label = "module inclusion";
+        itemType = "module";
+      };
+      moduleDefs = map (selection: requireByKey host.file "module" selection.key project.modulesByKey) explicitModuleSelections.ordered;
+      explicitInputSelections = collectExplicitSelections {
+        inherit host presetDefs;
+        field = "inputModules";
+        label = "input module inclusion";
+        itemType = "input module";
+      };
+      transitiveInputSelections = lib.concatMap (
+        moduleDef:
+        map
+          (ref: {
+            key = ref;
+            origin = makeOrigin "module" moduleDef.key moduleDef.file;
+          })
+          moduleDef.inputs
+      ) moduleDefs;
+      _ = assertNoOverlapWithOrigins {
+        file = host.file;
+        label = "input module inclusion";
+        explicitSelections = explicitInputSelections.ordered;
+        inherit transitiveInputSelections;
+      };
       hostConfigModule =
         if builtins.pathExists host.configFile then
           host.configFile
@@ -394,6 +595,10 @@ let
     in
     {
       inherit host profileDefs presetDefs moduleDefs;
+      presetSelections = presetSelections.ordered;
+      explicitModuleSelections = explicitModuleSelections.ordered;
+      explicitInputSelections = explicitInputSelections.ordered;
+      transitiveInputSelections = transitiveInputSelections;
       modules =
         map
           (moduleDef: makeSembleModule {
@@ -401,6 +606,14 @@ let
             inherit (project) inputs;
           })
           moduleDefs
+        ++ map (
+          selection:
+          resolveInputRef {
+            inputs = project.inputs;
+            file = host.file;
+            ref = selection.key;
+          }
+        ) explicitInputSelections.ordered
         ++ map (preset: { config = overrideValues 200 preset.values; }) presetDefs
         ++ [
           {
@@ -408,6 +621,50 @@ let
           }
           hostConfigModule
         ];
+    };
+
+  resolveImage =
+    {
+      project,
+      key,
+    }:
+    let
+      image = requireByKey project.root "image" key project.imagesByKey;
+      resolvedHost = resolveHost {
+        inherit project;
+        key = image.host;
+      };
+    in
+    {
+      inherit image resolvedHost;
+      modules = resolvedHost.modules ++ [
+        "${project.inputs.nixpkgs}/nixos/modules/virtualisation/disk-image.nix"
+        {
+          image = {
+            inherit (image) format efiSupport;
+          };
+        }
+      ];
+      build =
+        (project.inputs.nixpkgs.lib.nixosSystem {
+          system = resolvedHost.host.system;
+          specialArgs = {
+            inherit (project) inputs;
+            semble = {
+              inherit project;
+              resolved = resolvedHost;
+              image = image;
+            };
+          };
+          modules = resolvedHost.modules ++ [
+            "${project.inputs.nixpkgs}/nixos/modules/virtualisation/disk-image.nix"
+            {
+              image = {
+                inherit (image) format efiSupport;
+              };
+            }
+          ];
+        }).config.system.build.image;
     };
 
   mkFlake =
@@ -437,6 +694,13 @@ let
           modules = resolved.modules;
         }
       ) project.hostsByKey;
+
+      images = lib.mapAttrs (
+        key: _:
+        (resolveImage {
+          inherit project key;
+        }).build
+      ) project.imagesByKey;
     };
 in
 {
@@ -445,5 +709,6 @@ in
     lib
     mkFlake
     resolveHost
+    resolveImage
     ;
 }

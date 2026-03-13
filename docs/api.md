@@ -19,9 +19,14 @@ project_root/
 |   `-- thor/
 |       |-- configuration.nix
 |       `-- default.nix
+|-- images/
+|   `-- installer/
+|       `-- default.nix
 |-- modules/
-|   `-- security/
-|       `-- sops.nix
+|   |-- security/
+|   |   `-- sops.nix
+|   `-- virtualization/
+|       `-- microvm-host.nix
 |-- presets/
 |   `-- security/
 |       `-- sopsDefault.nix
@@ -39,6 +44,16 @@ contents, and normalizes them into its internal composition model.
 The consumer-facing file interface is Semble's primary API. Flake outputs are a
 compatibility layer built from that interface.
 
+The intended layering model is:
+
+- `inputModules`: raw upstream escape hatch
+- `modules`: local capability layer
+- `presets`: reusable bundles and defaults
+- `profiles`: broad reusable baselines
+
+Consumers should usually start at `inputModules` or `modules`, and only promote
+upward when repetition appears.
+
 ## Consumer Flake Interface
 
 For v1, the consumer flake calls Semble directly from `outputs`.
@@ -47,14 +62,16 @@ Semble is responsible for:
 
 - discovering `hosts/`, `modules/`, `presets/`, and `profiles/`
 - validating and normalizing those files
-- resolving Semble composition
+- resolving Semble composition across profiles, presets, modules, and raw input module escape hatches
 - returning `nixosConfigurations` for `nixos-rebuild --flake`
+- returning `images` for bootable artifact builds such as `nix build .#images.installer`
 
 The consumer remains responsible for its own `devShells` used with
 `nix develop`.
 
-For now, Semble does not need to require or standardize `packages`, `apps`,
-`checks`, `templates`, `overlays`, or `darwinConfigurations`.
+For v0.3, Semble standardizes `images/` as a first-class consumer convention in
+addition to host composition. It still does not require or standardize
+`packages`, `apps`, `checks`, `templates`, `overlays`, or `darwinConfigurations`.
 
 ## Minimal Consumer Flake Example
 
@@ -83,7 +100,7 @@ This is the minimal v1 entrypoint:
 
 - the consumer declares `inputs`
 - the consumer calls `inputs.semble.lib.mkFlake`
-- Semble returns `nixosConfigurations`
+- Semble returns `nixosConfigurations` and `images`
 
 ## Extended Consumer Flake Example
 
@@ -146,6 +163,8 @@ Each host lives at `hosts/<name>/default.nix`.
 
   profiles = [ "base" ];
   presets = [ "security.sopsDefault" ];
+  modules = [ "virtualization.microvm-host" ];
+  inputModules = [ "microvm.host" ];
 }
 ```
 
@@ -158,8 +177,26 @@ Supported host fields:
 - `system`: The target system string, such as `"x86_64-linux"`.
 - `profiles`: A list of profile keys to include.
 - `presets`: A list of preset keys to include directly.
+- `modules`: A list of local Semble module keys to include directly for this host.
+- `inputModules`: A list of raw input module references to include directly for this host. This is the raw upstream layer for cases where a local Semble abstraction is not needed yet.
 - `configFile`: Optional path to a host-local override module. Defaults to
   `./configuration.nix`.
+
+### Layer Selection Rule
+
+Hosts should start at one of these two layers:
+
+- `inputModules`, when they want to consume an upstream NixOS module directly
+- `modules`, when they already want a local Semble capability name and option surface
+
+They should move upward only when repetition appears:
+
+- promote repeated module or `inputModules` combinations into a `preset`
+- promote repeated preset combinations into a `profile`
+
+Semble does not require a local module or preset just to hide a single upstream
+import. If the only shared fact is "this host needs `microvm.host`", keep that
+as `inputModules` until a real local capability abstraction emerges.
 
 If a host needs a different host-local override file, it can set `configFile`
 explicitly:
@@ -172,6 +209,7 @@ explicitly:
 
   profiles = [ "base" ];
   presets = [ "security.sopsDefault" ];
+  modules = [ "virtualization.microvm-host" ];
 
   configFile = ./overrides.nix;
 }
@@ -202,6 +240,48 @@ If present, the default host-local override file is
 
 This file is optional. If `configFile` is omitted and `./configuration.nix`
 does not exist, Semble should treat it as empty.
+
+## Images
+
+Each image lives at `images/<name>/default.nix`.
+
+```nix
+# images/installer/default.nix
+{
+  host = "thor";
+  format = "raw";
+  efiSupport = true;
+}
+```
+
+Image files express packaging intent for a host-defined system. They do not
+replace host definitions or duplicate host composition.
+
+Supported image fields:
+
+- `host`: The host key to package into a boot artifact.
+- `format`: The output image format. v0.3 supports `"raw"`.
+- `efiSupport`: Whether the produced image should be EFI-bootable.
+
+### Image Resolution Rule
+
+Images are always resolved from an existing host definition. Semble first
+resolves the referenced host through the normal host pipeline, then appends the
+image-specific packaging module stack.
+
+That means images own artifact packaging, while hosts continue to own system
+behavior.
+
+### Image Outputs
+
+Semble exports resolved images under the flake `images` output:
+
+```bash
+nix build .#images.installer
+```
+
+The resulting value is a derivation for the image artifact, not a second host
+definition.
 
 ## Modules
 
@@ -250,10 +330,20 @@ Supported module fields:
 - `options`: Option schema for the Semble namespace.
 - `config`: Behavior that uses those options.
 
+Modules are the local capability layer. They are appropriate when the project
+wants:
+
+- a stable local capability name
+- a Semble-managed option surface under `sb.*`
+- reusable behavior beyond a one-off upstream import
+
+Modules are not required just because an upstream import exists. If there is no
+meaningful local API yet, `inputModules` is the simpler starting point.
+
 ## Presets
 
-Presets live under `presets/`. They compose modules and assign values to
-existing module options. They do not define new options.
+Presets live under `presets/`. They compose modules and assign reusable
+default values to existing module options. They do not define new options.
 
 ```nix
 # presets/security/sopsDefault.nix
@@ -275,12 +365,21 @@ Supported preset fields:
 
 - `key`: Optional explicit key override.
 - `modules`: A list of module keys to include.
+- `inputModules`: A list of raw input module references to include.
 - `values`: A set of values for existing module options.
+
+Presets are the bundle/default layer. They are appropriate only once several
+module choices, `inputModules`, or default values recur together.
+
+Preset-level `inputModules` are valid reusable composition. Semble does not
+force every repeated upstream bundle to become a local module abstraction
+immediately. If there is no repeated bundle yet, stay at `inputModules` or
+`modules`.
 
 ## Profiles
 
-Profiles live under `profiles/`. They compose presets and do not compose
-modules directly.
+Profiles live under `profiles/`. They compose presets and define broad
+baselines. They do not compose modules directly.
 
 ```nix
 # profiles/base.nix
@@ -296,6 +395,9 @@ Supported profile fields:
 
 - `key`: Optional explicit key override.
 - `presets`: A list of preset keys to include.
+
+Profiles are the broad baseline layer. They should represent repeated machine
+baselines, not ad hoc per-host composition.
 
 ## Normalization Semantics
 
@@ -316,9 +418,10 @@ Their job is to:
 Semble resolves host structure in this order:
 
 1. Selected `profiles` to presets.
-2. Selected and derived presets to modules.
-3. Module `inputs` to top-level imports.
-4. Assemble the final module import graph.
+2. Presets contribute explicit `modules`, `inputModules`, and `values`.
+3. Hosts contribute explicit `modules` and `inputModules`.
+4. Included Semble modules contribute transitive `inputs`.
+5. Assemble the final module import graph.
 
 ## Value Application Order
 
@@ -328,6 +431,23 @@ Once the import graph is assembled, Semble applies configuration in this order:
 2. Preset `values`.
 3. Default host-derived values such as `networking.hostName = hostName`.
 4. Host `configFile`, where host-local configuration wins.
+
+Hosts should usually start at one of two layers:
+
+- `inputModules`, when the project wants to use an upstream module directly.
+- `modules`, when the project already wants a local Semble capability name and interface.
+
+From there:
+
+- repeated module or `inputModules` combinations can be promoted into `presets`
+- repeated preset combinations can be promoted into `profiles`
+
+This is the intended progression:
+
+1. direct upstream need -> `inputModules`
+2. local capability/API -> `modules`
+3. repeated bundle/defaults -> `presets`
+4. repeated baseline -> `profiles`
 
 ## Naming And Key Rules
 
@@ -339,17 +459,18 @@ Once the import graph is assembled, Semble applies configuration in this order:
 5. `inputs = [ "<input>.<module>" ]` resolves by convention as
    `inputs.<input>.nixosModules.<module>`.
 6. Unknown module, preset, profile, or input keys are hard errors.
-7. Duplicate module, preset, or profile inclusion is a hard error. Semble does
-   not deduplicate repeated selections implicitly.
+7. Duplicate inclusion is a hard error across `modules`, `inputModules`,
+   `presets`, `profiles`, and overlap between explicit `inputModules` and
+   module-transitive `inputs`.
+8. Duplicate errors include provenance so users can see which ownership path to
+   remove. Semble does not deduplicate repeated selections implicitly.
 
 ## Deferred Questions
 
 These are intentionally left unspecified for now and are not part of the v1
 contract:
 
-1. Whether upstream module resolution needs an explicit escape hatch beyond the
-   `inputs.<input>.nixosModules.<module>` convention.
-2. What stability guarantees derived keys should have across file moves and
+1. What stability guarantees derived keys should have across file moves and
    refactors.
-3. Whether Semble should later standardize additional compatibility outputs such
+2. Whether Semble should later standardize additional compatibility outputs such
    as `darwinConfigurations`, `checks`, or `nixosModules`.
