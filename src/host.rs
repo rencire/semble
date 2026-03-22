@@ -9,6 +9,7 @@ use crate::ssh_config;
 use crate::template::{copy_host_template, ensure_facter_file};
 use anyhow::Result;
 use std::fs;
+use std::fmt::Write as _;
 use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -404,15 +405,40 @@ fn print_create_summary(
     sops_key_path: Option<&Path>,
     ssh_changed: bool,
 ) {
-    println!(
+    print!(
+        "{}",
+        create_summary_text(
+            paths,
+            dst_dir,
+            keys_dir,
+            reencrypted,
+            sops_key_path,
+            ssh_changed,
+        )
+    );
+}
+
+fn create_summary_text(
+    paths: &RepoPaths,
+    dst_dir: &Path,
+    keys_dir: &Path,
+    reencrypted: bool,
+    sops_key_path: Option<&Path>,
+    ssh_changed: bool,
+) -> String {
+    let mut output = String::new();
+    let _ = writeln!(
+        output,
         "Created host scaffold: {}",
         relative_to_root(paths, dst_dir)
     );
-    println!(
+    let _ = writeln!(
+        output,
         "Created SSH host keys: {}",
         relative_to_root(paths, keys_dir)
     );
-    println!(
+    let _ = writeln!(
+        output,
         "Updated SSH aliases in {} ({})",
         relative_to_root(paths, &paths.ssh_config_module_file()),
         if ssh_changed {
@@ -422,29 +448,29 @@ fn print_create_summary(
         }
     );
     if reencrypted {
-        println!(
+        let _ = writeln!(
+            output,
             "Updated SOPS recipients for: {}",
             relative_to_root(paths, &paths.network_secrets_file())
         );
         if let Some(path) = sops_key_path {
-            println!("Used SOPS update key: {}", path.display());
+            let _ = writeln!(output, "Used SOPS update key: {}", path.display());
         }
     } else {
-        println!(
+        let _ = writeln!(
+            output,
             "Skipped SOPS re-encryption for: {}",
             relative_to_root(paths, &paths.network_secrets_file())
         );
     }
-    println!();
-    println!("Next steps:");
-    println!(
-        "  1. Review {}/networking.nix and adjust IP/network details.",
+    let _ = writeln!(output);
+    let _ = writeln!(output, "Next steps:");
+    let _ = writeln!(
+        output,
+        "  1. Review {}/networking.nix and adjust host-specific details.",
         relative_to_root(paths, dst_dir)
     );
-    println!(
-        "  2. `git add` the new host files and SSH public/private host keys you intend to keep tracked."
-    );
-    println!("  3. Run `nix build .#{{hostname}}` after the host-specific details are filled in.");
+    output
 }
 
 fn print_keys_summary(
@@ -541,7 +567,7 @@ fn yes_no(value: bool) -> &'static str {
 mod tests {
     use super::{
         add_ssh_aliases, assert_hostname_exists_for_delete, assert_hostname_is_new,
-        delete_ssh_aliases, host_presence, validate_hostname,
+        create_summary_text, delete_ssh_aliases, host_presence, validate_hostname,
     };
     use crate::repo::RepoPaths;
     use std::fs;
@@ -723,5 +749,30 @@ creation_rules:
         assert!(presence.keys_dir);
         assert!(!presence.sops);
         assert!(!presence.ssh_aliases_present);
+    }
+
+    #[test]
+    fn create_summary_is_minimal_and_repo_local() {
+        let (_tempdir, paths) = setup_repo();
+        let hostname = "thor";
+        let output = create_summary_text(
+            &paths,
+            &paths.host_dir(hostname),
+            &paths.host_keys_dir(hostname),
+            false,
+            None,
+            true,
+        );
+
+        assert!(output.contains("Created host scaffold: hosts/thor"));
+        assert!(output.contains("Created SSH host keys: ssh_host_keys/thor"));
+        assert!(output.contains("Next steps:"));
+        assert!(
+            output.contains("Review hosts/thor/networking.nix and adjust host-specific details.")
+        );
+        assert!(!output.contains("git add"));
+        assert!(!output.contains("nix build"));
+        assert!(!output.contains("semble host build"));
+        assert!(!output.contains("semble host switch"));
     }
 }
