@@ -3,8 +3,9 @@
 `semble` is a repo-aware host management CLI.
 
 It expects the target repo to define a root-level `semble.toml` that specifies:
-- repo paths such as `hosts/`, `ssh_host_keys/`, `.sops.yaml`, and the SSH config module
+- repo paths such as `hosts/`, `ssh_host_keys/`, and `.sops.yaml`
 - the host template location
+- the managed SSH config fragment path
 - SSH alias conventions such as DNS suffix, users, and identity files
 
 Typical commands:
