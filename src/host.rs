@@ -478,28 +478,44 @@ fn print_keys_summary(
     reencrypted: bool,
     sops_key_path: Option<&Path>,
 ) {
-    println!(
+    print!("{}", keys_summary_text(paths, keys_dir, reencrypted, sops_key_path));
+}
+
+fn keys_summary_text(
+    paths: &RepoPaths,
+    keys_dir: &Path,
+    reencrypted: bool,
+    sops_key_path: Option<&Path>,
+) -> String {
+    let mut output = String::new();
+    let _ = writeln!(
+        output,
         "Created SSH host keys: {}",
         relative_to_root(paths, keys_dir)
     );
     if reencrypted {
-        println!(
+        let _ = writeln!(
+            output,
             "Updated SOPS recipients for: {}",
             relative_to_root(paths, &paths.network_secrets_file())
         );
         if let Some(path) = sops_key_path {
-            println!("Used SOPS update key: {}", path.display());
+            let _ = writeln!(output, "Used SOPS update key: {}", path.display());
         }
     } else {
-        println!(
+        let _ = writeln!(
+            output,
             "Skipped SOPS re-encryption for: {}",
             relative_to_root(paths, &paths.network_secrets_file())
         );
     }
-    println!();
-    println!("Next steps:");
-    println!("  1. `git add` the new SSH host keys you intend to keep tracked.");
-    println!("  2. If this host should decrypt network secrets, keep the .sops.yaml change.");
+    let _ = writeln!(output);
+    let _ = writeln!(
+        output,
+        "Next, review whether the host-specific keys and secret-recipient changes under {} should be kept.",
+        relative_to_root(paths, keys_dir)
+    );
+    output
 }
 
 struct DeleteSummary<'a> {
@@ -566,7 +582,8 @@ fn yes_no(value: bool) -> &'static str {
 mod tests {
     use super::{
         add_ssh_aliases, assert_hostname_exists_for_delete, assert_hostname_is_new,
-        create_summary_text, delete_ssh_aliases, host_presence, validate_hostname,
+        create_summary_text, delete_ssh_aliases, host_presence, keys_summary_text,
+        validate_hostname,
     };
     use crate::repo::RepoPaths;
     use std::fs;
@@ -772,5 +789,20 @@ creation_rules:
         assert!(!output.contains("nix build"));
         assert!(!output.contains("semble host build"));
         assert!(!output.contains("semble host switch"));
+    }
+
+    #[test]
+    fn keys_summary_is_minimal_and_repo_local() {
+        let (_tempdir, paths) = setup_repo();
+        let hostname = "thor";
+        let output = keys_summary_text(&paths, &paths.host_keys_dir(hostname), false, None);
+
+        assert!(output.contains("Created SSH host keys: ssh_host_keys/thor"));
+        assert!(output.contains(
+            "Next, review whether the host-specific keys and secret-recipient changes under ssh_host_keys/thor should be kept."
+        ));
+        assert!(!output.contains("Next steps:"));
+        assert!(!output.contains("git add"));
+        assert!(!output.contains("  1."));
     }
 }
