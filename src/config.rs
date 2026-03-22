@@ -16,14 +16,11 @@ pub struct PathsConfig {
     pub ssh_host_keys_dir: PathBuf,
     pub sops_config_file: PathBuf,
     pub network_secrets_file: PathBuf,
-    #[serde(default)]
-    pub ssh_config_module_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SshConfig {
-    #[serde(default)]
-    pub managed_config_file: Option<PathBuf>,
+    pub managed_config_file: PathBuf,
     pub dns_suffix: String,
     pub aliases: Vec<SshAliasConfig>,
 }
@@ -44,16 +41,7 @@ impl SembleConfig {
                 config_path.display()
             )
         })?;
-        let config: Self = toml::from_str(&raw)
-            .with_context(|| format!("failed to parse {}", config_path.display()))?;
-        if config.ssh.managed_config_file.is_none() && config.paths.ssh_config_module_file.is_none()
-        {
-            anyhow::bail!(
-                "{} must define either [ssh].managed_config_file or the legacy [paths].ssh_config_module_file",
-                config_path.display()
-            );
-        }
-        Ok(config)
+        toml::from_str(&raw).with_context(|| format!("failed to parse {}", config_path.display()))
     }
 }
 
@@ -73,32 +61,5 @@ mod tests {
         .unwrap();
 
         assert!(SembleConfig::load(tempdir.path()).is_err());
-    }
-
-    #[test]
-    fn accepts_legacy_ssh_config_path() {
-        let tempdir = tempdir().unwrap();
-        fs::write(
-            tempdir.path().join("semble.toml"),
-            r#"[paths]
-hosts_dir = "hosts"
-host_template_dir = "hosts/_template"
-ssh_host_keys_dir = "ssh_host_keys"
-sops_config_file = ".sops.yaml"
-network_secrets_file = "secrets/network.yaml"
-ssh_config_module_file = "nix/homeModules/network.nix"
-
-[ssh]
-dns_suffix = "example.ts.net"
-
-[[ssh.aliases]]
-name_suffix = "deploy"
-user = "deploy"
-identity_file = "~/.ssh/id_test"
-"#,
-        )
-        .unwrap();
-
-        assert!(SembleConfig::load(tempdir.path()).is_ok());
     }
 }

@@ -57,14 +57,7 @@ impl RepoPaths {
     }
 
     pub fn ssh_managed_config_file(&self) -> PathBuf {
-        let configured = self
-            .config
-            .ssh
-            .managed_config_file
-            .as_ref()
-            .or(self.config.paths.ssh_config_module_file.as_ref())
-            .expect("SembleConfig::load validates SSH config path presence");
-        resolve_user_path(configured, &self.root)
+        resolve_user_path(&self.config.ssh.managed_config_file, &self.root)
     }
 
     pub fn host_template_dir(&self) -> PathBuf {
