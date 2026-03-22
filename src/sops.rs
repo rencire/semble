@@ -295,9 +295,9 @@ host_template_dir = "hosts/host.template"
 ssh_host_keys_dir = "ssh_host_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"
-ssh_config_module_file = "nix/homeModules/network.nix"
 
 [ssh]
+managed_config_file = ".ssh/semble_hosts"
 dns_suffix = "baiji-carat.ts.net"
 
 [[ssh.aliases]]

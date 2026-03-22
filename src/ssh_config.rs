@@ -1,22 +1,25 @@
-use crate::error::fail;
 use crate::repo::RepoPaths;
 use anyhow::Result;
 use std::fs;
 
 fn ssh_alias_block(host_alias: &str, dns_name: &str, user: &str, identity_file: &str) -> String {
     format!(
-        "        \"{host_alias}\" = {{\n          hostname = \"{dns_name}\";\n          user = \"{user}\";\n          identityFile = \"{identity_file}\";\n          identitiesOnly = true;\n        }};\n"
+        "# semble:begin {host_alias}\nHost {host_alias}\n  HostName {dns_name}\n  User {user}\n  IdentityFile {identity_file}\n  IdentitiesOnly yes\n# semble:end {host_alias}\n"
     )
 }
 
 pub fn update_ssh_aliases_add(paths: &RepoPaths, hostname: &str) -> Result<bool> {
-    let ssh_config_path = paths.ssh_config_module_file();
-    let mut text = fs::read_to_string(&ssh_config_path)?;
-    let mut additions = Vec::new();
+    let ssh_config_path = paths.ssh_managed_config_file();
+    let original = match fs::read_to_string(&ssh_config_path) {
+        Ok(contents) => contents,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(err) => return Err(err.into()),
+    };
 
+    let mut additions = Vec::new();
     for alias in paths.ssh_aliases_for_host(hostname) {
-        let marker = format!("\"{}\" = {{", alias.host_alias);
-        if text.contains(&marker) {
+        let marker = format!("# semble:begin {}", alias.host_alias);
+        if original.contains(&marker) {
             continue;
         }
         additions.push(ssh_alias_block(
@@ -31,62 +34,55 @@ pub fn update_ssh_aliases_add(paths: &RepoPaths, hostname: &str) -> Result<bool>
         return Ok(false);
     }
 
-    let insertion = additions.join("");
-    for anchor in [
-        "        \"genesis-nixos\" = {",
-        "        \"*\" = {",
-        "      };",
-    ] {
-        if text.contains(anchor) {
-            text = text.replacen(anchor, &format!("{insertion}{anchor}"), 1);
-            fs::write(ssh_config_path, text)?;
-            return Ok(true);
-        }
+    if let Some(parent) = ssh_config_path.parent() {
+        fs::create_dir_all(parent)?;
     }
 
-    fail(format!(
-        "could not find an insertion point for SSH matchBlocks in {}",
-        paths.ssh_config_module_file().display()
-    ))
+    let mut updated = original;
+    if !updated.is_empty() && !updated.ends_with('\n') {
+        updated.push('\n');
+    }
+    if !updated.is_empty() && !updated.ends_with("\n\n") {
+        updated.push('\n');
+    }
+    updated.push_str(&additions.join("\n"));
+    fs::write(ssh_config_path, updated)?;
+    Ok(true)
 }
 
 pub fn update_ssh_aliases_delete(paths: &RepoPaths, hostname: &str) -> Result<bool> {
-    let ssh_config_path = paths.ssh_config_module_file();
-    let original = fs::read_to_string(&ssh_config_path)?;
-    let mut lines = original.lines().peekable();
-    let mut kept = Vec::new();
-    let mut removed = false;
+    let ssh_config_path = paths.ssh_managed_config_file();
+    let original = match fs::read_to_string(&ssh_config_path) {
+        Ok(contents) => contents,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(err) => return Err(err.into()),
+    };
+
     let aliases = paths
         .ssh_aliases_for_host(hostname)
         .into_iter()
         .map(|alias| alias.host_alias)
         .collect::<Vec<_>>();
 
-    while let Some(line) = lines.next() {
-        let trimmed = line.trim_start();
-        let mut skipped_alias = false;
+    let mut kept = Vec::new();
+    let mut removed = false;
+    let mut skipping_alias: Option<String> = None;
 
-        for alias in &aliases {
-            if trimmed == format!("\"{alias}\" = {{") {
-                removed = true;
-                skipped_alias = true;
-                let mut depth = 1usize;
-                for block_line in lines.by_ref() {
-                    if block_line.trim_end().ends_with("{") {
-                        depth += 1;
-                    }
-                    if block_line.trim() == "};" {
-                        depth -= 1;
-                        if depth == 0 {
-                            break;
-                        }
-                    }
-                }
-                break;
+    for line in original.lines() {
+        if let Some(alias) = &skipping_alias {
+            if line == format!("# semble:end {alias}") {
+                skipping_alias = None;
             }
+            removed = true;
+            continue;
         }
 
-        if skipped_alias {
+        if let Some(alias) = aliases
+            .iter()
+            .find(|alias| line == format!("# semble:begin {alias}"))
+        {
+            skipping_alias = Some(alias.clone());
+            removed = true;
             continue;
         }
 
@@ -94,7 +90,14 @@ pub fn update_ssh_aliases_delete(paths: &RepoPaths, hostname: &str) -> Result<bo
     }
 
     if removed {
-        fs::write(ssh_config_path, format!("{}\n", kept.join("\n")))?;
+        let mut updated = kept.join("\n");
+        while updated.contains("\n\n\n") {
+            updated = updated.replace("\n\n\n", "\n\n");
+        }
+        if !updated.is_empty() {
+            updated.push('\n');
+        }
+        fs::write(ssh_config_path, updated)?;
     }
 
     Ok(removed)

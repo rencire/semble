@@ -1,5 +1,6 @@
 use crate::config::{SembleConfig, SshAliasConfig};
 use anyhow::Result;
+use std::env;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
@@ -55,8 +56,15 @@ impl RepoPaths {
         self.root.join(&self.config.paths.network_secrets_file)
     }
 
-    pub fn ssh_config_module_file(&self) -> PathBuf {
-        self.root.join(&self.config.paths.ssh_config_module_file)
+    pub fn ssh_managed_config_file(&self) -> PathBuf {
+        let configured = self
+            .config
+            .ssh
+            .managed_config_file
+            .as_ref()
+            .or(self.config.paths.ssh_config_module_file.as_ref())
+            .expect("SembleConfig::load validates SSH config path presence");
+        resolve_user_path(configured, &self.root)
     }
 
     pub fn host_template_dir(&self) -> PathBuf {
@@ -79,5 +87,20 @@ impl RepoPaths {
             user: alias.user.clone(),
             identity_file: alias.identity_file.clone(),
         }
+    }
+}
+
+fn resolve_user_path(path: &Path, root: &Path) -> PathBuf {
+    let rendered = path.to_string_lossy();
+    if let Some(stripped) = rendered.strip_prefix("~/") {
+        if let Some(home) = env::var_os("HOME") {
+            return PathBuf::from(home).join(stripped);
+        }
+    }
+
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        root.join(path)
     }
 }

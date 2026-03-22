@@ -48,7 +48,7 @@ pub fn sanitized_anchor(hostname: &str) -> String {
 pub fn host_presence(paths: &RepoPaths, hostname: &str) -> Result<HostPresence> {
     let anchor = sanitized_anchor(hostname);
     let sops_text = fs::read_to_string(paths.sops_config_file())?;
-    let ssh_text = match fs::read_to_string(paths.ssh_config_module_file()) {
+    let ssh_text = match fs::read_to_string(paths.ssh_managed_config_file()) {
         Ok(contents) => contents,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(err) => return Err(err.into()),
@@ -57,7 +57,7 @@ pub fn host_presence(paths: &RepoPaths, hostname: &str) -> Result<HostPresence> 
     let ssh_aliases_present = paths
         .ssh_aliases_for_host(hostname)
         .iter()
-        .any(|alias| ssh_text.contains(&format!("\"{}\" = {{", alias.host_alias)));
+        .any(|alias| ssh_text.contains(&format!("# semble:begin {}", alias.host_alias)));
 
     Ok(HostPresence {
         host_dir: paths.host_dir(hostname).exists(),
@@ -93,7 +93,7 @@ pub fn assert_hostname_is_new(paths: &RepoPaths, hostname: &str) -> Result<()> {
     if presence.ssh_aliases_present {
         conflicts.push(format!(
             "SSH aliases already present in {}",
-            paths.ssh_config_module_file().display()
+            paths.ssh_managed_config_file().display()
         ));
     }
 
@@ -146,7 +146,7 @@ pub fn assert_hostname_exists_for_delete(
         paths.host_dir(hostname).display(),
         paths.host_keys_dir(hostname).display(),
         paths.sops_config_file().display(),
-        paths.ssh_config_module_file().display(),
+        paths.ssh_managed_config_file().display(),
     ))
 }
 
@@ -155,7 +155,7 @@ pub fn add_ssh_aliases(paths: &RepoPaths, hostname: &str, strict: bool) -> Resul
     if strict && !changed {
         return fail(format!(
             "SSH aliases already present for {hostname} in {}",
-            paths.ssh_config_module_file().display()
+            paths.ssh_managed_config_file().display()
         ));
     }
     Ok(changed)
@@ -166,7 +166,7 @@ pub fn delete_ssh_aliases(paths: &RepoPaths, hostname: &str, strict: bool) -> Re
     if strict && !changed {
         return fail(format!(
             "SSH aliases not present for {hostname} in {}",
-            paths.ssh_config_module_file().display()
+            paths.ssh_managed_config_file().display()
         ));
     }
     Ok(changed)
@@ -341,7 +341,7 @@ pub fn run_host_delete(
             ),
             format!(
                 "remove SSH aliases from {}",
-                relative_to_root(paths, &paths.ssh_config_module_file())
+                relative_to_root(paths, &paths.ssh_managed_config_file())
             ),
         ],
         assume_yes,
@@ -381,7 +381,7 @@ pub fn run_host_ssh_add(paths: &RepoPaths, hostname: &str) -> Result<()> {
     if add_ssh_aliases(paths, hostname, true)? {
         println!(
             "Added SSH aliases for {hostname} in {}",
-            relative_to_root(paths, &paths.ssh_config_module_file())
+            relative_to_root(paths, &paths.ssh_managed_config_file())
         );
     }
     Ok(())
@@ -391,7 +391,7 @@ pub fn run_host_ssh_delete(paths: &RepoPaths, hostname: &str) -> Result<()> {
     if delete_ssh_aliases(paths, hostname, true)? {
         println!(
             "Deleted SSH aliases for {hostname} from {}",
-            relative_to_root(paths, &paths.ssh_config_module_file())
+            relative_to_root(paths, &paths.ssh_managed_config_file())
         );
     }
     Ok(())
@@ -440,7 +440,7 @@ fn create_summary_text(
     let _ = writeln!(
         output,
         "Updated SSH aliases in {} ({})",
-        relative_to_root(paths, &paths.ssh_config_module_file()),
+        relative_to_root(paths, &paths.ssh_managed_config_file()),
         if ssh_changed {
             "yes"
         } else {
@@ -540,7 +540,7 @@ fn print_delete_summary(paths: &RepoPaths, hostname: &str, summary: DeleteSummar
     );
     println!(
         "Removed SSH aliases from {} ({})",
-        relative_to_root(paths, &paths.ssh_config_module_file()),
+        relative_to_root(paths, &paths.ssh_managed_config_file()),
         yes_no(summary.ssh_changed)
     );
     if summary.sops_changed {
@@ -589,24 +589,9 @@ mod tests {
     use std::fs;
     use tempfile::tempdir;
 
-    const NETWORK_MODULE_BASE: &str = r#"{ lib, pkgs, ... }:
-{
-  programs = {
-    ssh = {
-      matchBlocks = {
-        "genesis-nixos" = {
-          hostname = "genesis.baiji-carat.ts.net";
-          user = "nixos";
-          identityFile = "~/.ssh/homelab_installer";
-          identitiesOnly = true;
-        };
-        "*" = {
-          addKeysToAgent = "yes";
-        };
-      };
-    };
-  };
-}
+    const SSH_CONFIG_BASE: &str = r#"Host github.com
+  User git
+
 "#;
 
     const SEMBLE_TOML: &str = r#"[paths]
@@ -615,9 +600,9 @@ host_template_dir = "hosts/host.template"
 ssh_host_keys_dir = "ssh_host_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"
-ssh_config_module_file = "nix/homeModules/network.nix"
 
 [ssh]
+managed_config_file = ".ssh/semble_hosts"
 dns_suffix = "baiji-carat.ts.net"
 
 [[ssh.aliases]]
@@ -645,15 +630,11 @@ creation_rules:
         let root = tempdir.path().to_path_buf();
         fs::create_dir_all(root.join("hosts")).unwrap();
         fs::create_dir_all(root.join("ssh_host_keys")).unwrap();
-        fs::create_dir_all(root.join("nix").join("homeModules")).unwrap();
+        fs::create_dir_all(root.join(".ssh")).unwrap();
         fs::create_dir_all(root.join("secrets")).unwrap();
         fs::write(root.join("semble.toml"), SEMBLE_TOML).unwrap();
         fs::write(root.join(".sops.yaml"), SOPS_BASE).unwrap();
-        fs::write(
-            root.join("nix").join("homeModules").join("network.nix"),
-            NETWORK_MODULE_BASE,
-        )
-        .unwrap();
+        fs::write(root.join(".ssh").join("semble_hosts"), SSH_CONFIG_BASE).unwrap();
         (tempdir, RepoPaths::new(root).unwrap())
     }
 
@@ -678,12 +659,9 @@ creation_rules:
         )
         .unwrap();
         fs::write(
-            paths.ssh_config_module_file(),
-            NETWORK_MODULE_BASE.replace(
-                "\"genesis-nixos\" = {",
-                &format!(
-                    "        \"{hostname}-admin\" = {{\n          hostname = \"{hostname}.baiji-carat.ts.net\";\n          user = \"admin\";\n          identityFile = \"~/.ssh/homelab_admin\";\n          identitiesOnly = true;\n        }};\n        \"genesis-nixos\" = {{"
-                ),
+            paths.ssh_managed_config_file(),
+            format!(
+                "{SSH_CONFIG_BASE}# semble:begin {hostname}-admin\nHost {hostname}-admin\n  HostName {hostname}.baiji-carat.ts.net\n  User admin\n  IdentityFile ~/.ssh/homelab_admin\n  IdentitiesOnly yes\n# semble:end {hostname}-admin\n"
             ),
         )
         .unwrap();
@@ -718,18 +696,19 @@ creation_rules:
         let (_tempdir, paths) = setup_repo();
         let changed = add_ssh_aliases(&paths, "thor", false).unwrap();
         assert!(changed);
-        let text = fs::read_to_string(paths.ssh_config_module_file()).unwrap();
-        assert!(text.contains("\"thor-admin\" = {"));
-        assert!(text.contains("\"thor-deploy\" = {"));
+        let text = fs::read_to_string(paths.ssh_managed_config_file()).unwrap();
+        assert!(text.contains("Host thor-admin"));
+        assert!(text.contains("Host thor-deploy"));
 
         let changed_again = add_ssh_aliases(&paths, "thor", false).unwrap();
         assert!(!changed_again);
 
         let removed = delete_ssh_aliases(&paths, "thor", false).unwrap();
         assert!(removed);
-        let text = fs::read_to_string(paths.ssh_config_module_file()).unwrap();
-        assert!(!text.contains("\"thor-admin\" = {"));
-        assert!(!text.contains("\"thor-deploy\" = {"));
+        let text = fs::read_to_string(paths.ssh_managed_config_file()).unwrap();
+        assert!(!text.contains("Host thor-admin"));
+        assert!(!text.contains("Host thor-deploy"));
+        assert!(text.contains("Host github.com"));
 
         let removed_again = delete_ssh_aliases(&paths, "thor", false).unwrap();
         assert!(!removed_again);
