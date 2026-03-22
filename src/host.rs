@@ -464,10 +464,9 @@ fn create_summary_text(
         );
     }
     let _ = writeln!(output);
-    let _ = writeln!(output, "Next steps:");
     let _ = writeln!(
         output,
-        "  1. Review and adjust the host-specific settings in {}/.",
+        "Next, review and adjust the host-specific settings in {}/.",
         relative_to_root(paths, dst_dir),
     );
     output
@@ -766,8 +765,9 @@ creation_rules:
 
         assert!(output.contains("Created host scaffold: hosts/thor"));
         assert!(output.contains("Created SSH host keys: ssh_host_keys/thor"));
-        assert!(output.contains("Next steps:"));
-        assert!(output.contains("Review and adjust the host-specific settings in hosts/thor/."));
+        assert!(
+            output.contains("Next, review and adjust the host-specific settings in hosts/thor/.")
+        );
         assert!(!output.contains("git add"));
         assert!(!output.contains("nix build"));
         assert!(!output.contains("semble host build"));
