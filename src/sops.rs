@@ -372,4 +372,25 @@ identity_file = "~/.ssh/homelab_deploy"
         let key = autodetect_sops_key_file(&paths, None).unwrap();
         assert!(key.ends_with("ssh_host_ed25519_key"));
     }
+
+    #[test]
+    fn autodetect_skips_newly_added_hostname_when_requested() {
+        let (_tempdir, paths) = setup_repo();
+        fs::create_dir_all(paths.host_keys_dir("alpha")).unwrap();
+        fs::write(
+            paths.host_keys_dir("alpha").join("ssh_host_ed25519_key"),
+            "PRIVATE-ALPHA\n",
+        )
+        .unwrap();
+        fs::write(
+            paths.host_keys_dir("alpha").join("ssh_host_ed25519_key.pub"),
+            "ssh-ed25519 AAAAALPHA root@alpha\n",
+        )
+        .unwrap();
+
+        update_sops_yaml_add(&paths, "alpha", "ssh-ed25519 AAAAALPHA root@alpha").unwrap();
+
+        let key = autodetect_sops_key_file(&paths, Some("alpha")).unwrap();
+        assert!(key.ends_with("genesis/ssh_host_ed25519_key"));
+    }
 }

@@ -205,7 +205,8 @@ pub fn run_host_create(
         let public_key = read_public_key_from_dir(&keys_dir)?;
         update_sops_yaml_add(paths, hostname, &public_key)?;
     }
-    let sops_key_path = reencrypt_network_yaml(paths, skip_reencrypt, sops_key_file, None)?;
+    let sops_key_path =
+        reencrypt_network_yaml(paths, skip_reencrypt, sops_key_file, Some(hostname))?;
     print_create_summary(
         paths,
         &dst_dir,
@@ -229,7 +230,8 @@ pub fn run_host_keys_add(
         let public_key = read_public_key_from_dir(&keys_dir)?;
         update_sops_yaml_add(paths, hostname, &public_key)?;
     }
-    let sops_key_path = reencrypt_network_yaml(paths, skip_reencrypt, sops_key_file, None)?;
+    let sops_key_path =
+        reencrypt_network_yaml(paths, skip_reencrypt, sops_key_file, Some(hostname))?;
     print_keys_summary(paths, &keys_dir, !skip_reencrypt, sops_key_path.as_deref());
     Ok(())
 }
