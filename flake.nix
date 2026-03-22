@@ -50,6 +50,17 @@
 
       packages = forEachSystem (pkgs: import ./nix/packages { inherit pkgs; });
 
+      apps = forEachSystem (pkgs: {
+        semble = {
+          type = "app";
+          program = "${pkgs.semble}/bin/semble";
+        };
+        default = {
+          type = "app";
+          program = "${pkgs.semble}/bin/semble";
+        };
+      });
+
       devShells = forEachSystem (pkgs: import ./nix/devShells { inherit confix pkgs; });
 
       checks = forEachSystem (pkgs: import ./nix/checks {
