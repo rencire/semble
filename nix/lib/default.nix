@@ -400,6 +400,16 @@ let
     else
       fileError file "input `${inputName}` does not expose `${joinDot attrPath}`";
 
+  builderSpecialArgs =
+    {
+      inputs,
+      ref,
+    }:
+    if lib.hasPrefix "nixos-raspberrypi." ref then
+      { nixos-raspberrypi = inputs.nixos-raspberrypi; }
+    else
+      { };
+
   overrideValues =
     priority: value:
     if builtins.isAttrs value then
@@ -710,6 +720,10 @@ let
         file = host.file;
         ref = host.builder;
       };
+      extraSpecialArgs = builderSpecialArgs {
+        inherit inputs;
+        ref = host.builder;
+      };
     in
         builder {
           system = host.system;
@@ -718,7 +732,7 @@ let
             semble = {
               inherit project resolved;
             };
-          };
+          } // extraSpecialArgs;
           modules = resolved.modules;
         }
       ) project.hostsByKey;
