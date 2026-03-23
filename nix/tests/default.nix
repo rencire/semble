@@ -13,6 +13,18 @@ let
   testInputs = {
     inherit nixpkgs;
     fake = {
+      lib.nixosSystemFull =
+        args:
+        nixpkgs.lib.nixosSystem (
+          args
+          // {
+            modules = args.modules ++ [
+              {
+                environment.variables.FAKE_SYSTEM_BUILDER = "nixosSystemFull";
+              }
+            ];
+          }
+        );
       nixosModules.bundle = { ... }: {
         environment.variables.FAKE_BUNDLE = "enabled";
       };
@@ -47,6 +59,7 @@ let
 
   hostConfig = flake.nixosConfigurations.atlas.config;
   beaconConfig = flake.nixosConfigurations.beacon.config;
+  cedarConfig = flake.nixosConfigurations.cedar.config;
   installerImage = flake.images.installer;
 
   expectFailure =
@@ -65,7 +78,7 @@ let
     true;
 in
 {
-  discoveredHosts = assert (builtins.attrNames project.hostsByKey == [ "atlas" "beacon" ]); true;
+  discoveredHosts = assert (builtins.attrNames project.hostsByKey == [ "atlas" "beacon" "cedar" ]); true;
   discoveredModules = assert (builtins.attrNames project.modulesByKey == [ "branding" "extra" "security.sops" ]); true;
   discoveredPresets = assert (builtins.attrNames project.presetsByKey == [ "base" "security.sopsDefault" ]); true;
   discoveredImages = assert (builtins.attrNames project.imagesByKey == [ "installer" ]); true;
@@ -82,6 +95,7 @@ in
   upstreamInputsApply = assert (hostConfig.environment.variables.FAKE_INPUT == "enabled"); true;
   presetInputModulesApply = assert (hostConfig.environment.variables.FAKE_BUNDLE == "enabled"); true;
   hostInputModulesApply = assert (hostConfig.environment.variables.FAKE_DIRECT == "enabled"); true;
+  customHostBuilderApplies = assert (cedarConfig.environment.variables.FAKE_SYSTEM_BUILDER == "nixosSystemFull"); true;
   duplicatePresetFails = expectFailure duplicatePresetRoot;
   duplicateModuleFails = expectFailure duplicateModuleRoot;
   duplicateInputOverlapFails = expectFailure duplicateInputOverlapRoot;

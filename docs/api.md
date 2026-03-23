@@ -175,6 +175,9 @@ Supported host fields:
 - `hostName`: The host identity. Semble also defaults `networking.hostName` to
   this value.
 - `system`: The target system string, such as `"x86_64-linux"`.
+- `builder`: Optional attr-path string selecting the system constructor. Defaults
+  to `nixpkgs.lib.nixosSystem`. This allows alternate host backends such as
+  `nixos-raspberrypi.lib.nixosSystemFull`.
 - `profiles`: A list of profile keys to include.
 - `presets`: A list of preset keys to include directly.
 - `modules`: A list of local Semble module keys to include directly for this host.
@@ -212,6 +215,21 @@ explicitly:
   modules = [ "virtualization.microvm-host" ];
 
   configFile = ./overrides.nix;
+}
+```
+
+Hosts that need a non-default constructor can override `builder`:
+
+```nix
+{
+  hostName = "vishnu";
+  system = "aarch64-linux";
+  builder = "nixos-raspberrypi.lib.nixosSystemFull";
+
+  inputModules = [
+    "nixos-raspberrypi.raspberry-pi-02.base"
+    "nixos-raspberrypi.usb-gadget-ethernet"
+  ];
 }
 ```
 

@@ -150,9 +150,10 @@ let
     }:
     let
       raw = assertAttrset path (import path);
-      value = assertAllowedFields path [ "hostName" "system" "profiles" "presets" "modules" "inputModules" "configFile" ] raw;
+      value = assertAllowedFields path [ "hostName" "system" "builder" "profiles" "presets" "modules" "inputModules" "configFile" ] raw;
       hostName = assertString path "hostName" (value.hostName or (fileError path "missing required field `hostName`"));
       system = assertString path "system" (value.system or (fileError path "missing required field `system`"));
+      builder = assertString path "builder" (value.builder or "nixpkgs.lib.nixosSystem");
       profiles = assertUniqueValues path "profile selection" (assertListOfStrings path "profiles" (value.profiles or [ ]));
       presets = assertUniqueValues path "preset selection" (assertListOfStrings path "presets" (value.presets or [ ]));
       modules = assertUniqueValues path "module selection" (assertListOfStrings path "modules" (value.modules or [ ]));
@@ -170,7 +171,7 @@ let
         kind = "host";
         inherit relativePath;
       };
-      inherit hostName system profiles presets modules inputModules configFile;
+      inherit hostName system builder profiles presets modules inputModules configFile;
       configFileExplicit = value ? configFile;
     };
 
@@ -376,6 +377,28 @@ let
       builtins.getAttr moduleName modules
     else
       fileError file "input `${inputName}` does not expose nixosModules.${moduleName}";
+
+  resolveBuilderRef =
+    {
+      inputs,
+      file,
+      ref,
+    }:
+    let
+      parts = lib.splitString "." ref;
+      _ = assertCondition file (builtins.length parts >= 3) "builder reference `${ref}` must be `<input>.<path>.<function>`";
+      inputName = builtins.head parts;
+      attrPath = lib.tail parts;
+      input =
+        if builtins.hasAttr inputName inputs then
+          builtins.getAttr inputName inputs
+        else
+          fileError file "unknown input `${inputName}` referenced by builder `${ref}`";
+    in
+    if lib.hasAttrByPath attrPath input then
+      lib.getAttrFromPath attrPath input
+    else
+      fileError file "input `${inputName}` does not expose `${joinDot attrPath}`";
 
   overrideValues =
     priority: value:
@@ -679,11 +702,16 @@ let
       nixosConfigurations = lib.mapAttrs (
         key: host:
         let
-          resolved = resolveHost {
-            inherit project key;
-          };
-        in
-        inputs.nixpkgs.lib.nixosSystem {
+      resolved = resolveHost {
+        inherit project key;
+      };
+      builder = resolveBuilderRef {
+        inputs = inputs;
+        file = host.file;
+        ref = host.builder;
+      };
+    in
+        builder {
           system = host.system;
           specialArgs = {
             inherit inputs;
