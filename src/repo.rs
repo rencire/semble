@@ -1,4 +1,4 @@
-use crate::config::{SembleConfig, SshAliasConfig};
+use crate::config::{ImagePrepareConfig, SembleConfig, SshAliasConfig};
 use anyhow::Result;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -62,6 +62,10 @@ impl RepoPaths {
 
     pub fn host_template_dir(&self) -> PathBuf {
         self.root.join(&self.config.paths.host_template_dir)
+    }
+
+    pub fn image_prepare_config(&self, image_name: &str) -> Option<&ImagePrepareConfig> {
+        self.config.image_prepare.get(image_name)
     }
 
     pub fn ssh_aliases_for_host(&self, hostname: &str) -> Vec<ResolvedSshAlias> {

@@ -11,6 +11,7 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     Host(HostArgs),
+    Image(ImageArgs),
 }
 
 #[derive(Debug, Args)]
@@ -88,6 +89,30 @@ pub struct DelegatedHostArgs {
     pub extra_args: Vec<OsString>,
 }
 
+#[derive(Debug, Args)]
+pub struct ImageArgs {
+    #[command(subcommand)]
+    pub command: ImageCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ImageCommand {
+    Prepare(PrepareImageArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct PrepareImageArgs {
+    pub image_name: String,
+    #[arg(long)]
+    pub keys_dir: Option<String>,
+    #[arg(long)]
+    pub output: Option<String>,
+    #[arg(long)]
+    pub device: Option<String>,
+    #[arg(long)]
+    pub skip_inject: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::Cli;
@@ -134,6 +159,31 @@ mod tests {
         for args in cases {
             let result = Cli::try_parse_from(args);
             assert!(result.is_ok(), "failed to parse delegated host command");
+        }
+    }
+
+    #[test]
+    fn parses_image_prepare_commands() {
+        let cases = [
+            vec!["semble", "image", "prepare", "vishnu"],
+            vec!["semble", "image", "prepare", "vishnu", "--skip-inject"],
+            vec![
+                "semble",
+                "image",
+                "prepare",
+                "vishnu",
+                "--keys-dir",
+                "./ssh_host_keys/vishnu",
+                "--output",
+                "./out/vishnu.img",
+                "--device",
+                "/dev/mmcblk0",
+            ],
+        ];
+
+        for args in cases {
+            let result = Cli::try_parse_from(args);
+            assert!(result.is_ok(), "failed to parse image prepare command");
         }
     }
 }

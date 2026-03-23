@@ -4,6 +4,7 @@ pub mod confirm;
 pub mod delegate;
 pub mod error;
 pub mod host;
+pub mod image;
 pub mod keys;
 pub mod repo;
 pub mod sops;
@@ -11,7 +12,7 @@ pub mod ssh_config;
 pub mod template;
 
 use anyhow::Result;
-use cli::{Cli, Command, HostCommand};
+use cli::{Cli, Command, HostCommand, ImageCommand};
 
 pub fn run(cli: Cli) -> Result<()> {
     match cli.command {
@@ -78,6 +79,12 @@ pub fn run(cli: Cli) -> Result<()> {
                         host::run_host_ssh_delete(&paths, &args.hostname)
                     }
                 }
+            }
+        },
+        Command::Image(image) => match image.command {
+            ImageCommand::Prepare(args) => {
+                let paths = repo::RepoPaths::new(std::env::current_dir()?)?;
+                image::run_image_prepare(&paths, args)
             }
         },
     }
