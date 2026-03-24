@@ -165,6 +165,7 @@ Each host lives at `hosts/<name>/default.nix`.
   presets = [ "security.sopsDefault" ];
   modules = [ "virtualization.microvm-host" ];
   inputModules = [ "microvm.host" ];
+  ssh.aliases = [ ];
 }
 ```
 
@@ -184,6 +185,29 @@ Supported host fields:
 - `inputModules`: A list of raw input module references to include directly for this host. This is the raw upstream layer for cases where a local Semble abstraction is not needed yet.
 - `configFile`: Optional path to a host-local override module. Defaults to
   `./configuration.nix`.
+- `ssh.aliases`: Optional list overriding generated SSH client aliases for this host.
+  - if omitted, consumers may apply repo-wide defaults such as aliases from `semble.toml`
+  - if set to `[]`, no SSH aliases are generated for the host
+  - if set to a list, consumers should use that list exactly
+
+Example custom SSH alias override:
+
+```nix
+{
+  hostName = "genesis";
+  system = "x86_64-linux";
+
+  presets = [ "installer" ];
+
+  ssh.aliases = [
+    {
+      name = "genesis";
+      user = "root";
+      identityFile = "~/.ssh/homelab_installer";
+    }
+  ];
+}
+```
 
 ### Layer Selection Rule
 
