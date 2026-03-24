@@ -11,6 +11,7 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     Host(HostArgs),
+    Ssh(SshArgs),
     Image(ImageArgs),
 }
 
@@ -25,7 +26,6 @@ pub enum HostCommand {
     Create(NamedHostArgs),
     Delete(DeleteHostArgs),
     Keys(KeysArgs),
-    Ssh(SshArgs),
     Build(DelegatedHostArgs),
     Switch(DelegatedHostArgs),
     Provision(DelegatedHostArgs),
@@ -73,13 +73,7 @@ pub struct SshArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum SshCommand {
-    Add(HostnameArgs),
-    Delete(HostnameArgs),
-}
-
-#[derive(Debug, Args)]
-pub struct HostnameArgs {
-    pub hostname: String,
+    Setup,
 }
 
 #[derive(Debug, Args)]
@@ -130,8 +124,6 @@ mod tests {
             vec!["semble", "host", "delete", "thor", "--yes"],
             vec!["semble", "host", "keys", "add", "thor", "--force"],
             vec!["semble", "host", "keys", "delete", "thor", "--yes"],
-            vec!["semble", "host", "ssh", "add", "thor"],
-            vec!["semble", "host", "ssh", "delete", "thor"],
         ];
 
         for args in cases {
@@ -185,5 +177,11 @@ mod tests {
             let result = Cli::try_parse_from(args);
             assert!(result.is_ok(), "failed to parse image prepare command");
         }
+    }
+
+    #[test]
+    fn parses_ssh_setup_command() {
+        let result = Cli::try_parse_from(vec!["semble", "ssh", "setup"]);
+        assert!(result.is_ok(), "failed to parse ssh setup command");
     }
 }

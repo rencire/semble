@@ -5,11 +5,11 @@ use crate::repo::RepoPaths;
 use crate::sops::{
     network_rule_aliases, reencrypt_network_yaml, update_sops_yaml_add, update_sops_yaml_delete,
 };
-use crate::ssh_config;
+use crate::ssh;
 use crate::template::{copy_host_template, ensure_facter_file};
 use anyhow::Result;
-use std::fs;
 use std::fmt::Write as _;
+use std::fs;
 use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,7 +17,6 @@ pub struct HostPresence {
     pub host_dir: bool,
     pub keys_dir: bool,
     pub sops: bool,
-    pub ssh_aliases_present: bool,
 }
 
 pub fn validate_hostname(hostname: &str) -> Result<()> {
@@ -48,23 +47,12 @@ pub fn sanitized_anchor(hostname: &str) -> String {
 pub fn host_presence(paths: &RepoPaths, hostname: &str) -> Result<HostPresence> {
     let anchor = sanitized_anchor(hostname);
     let sops_text = fs::read_to_string(paths.sops_config_file())?;
-    let ssh_text = match fs::read_to_string(paths.ssh_managed_config_file()) {
-        Ok(contents) => contents,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(err) => return Err(err.into()),
-    };
-
-    let ssh_aliases_present = paths
-        .ssh_aliases_for_host(hostname)
-        .iter()
-        .any(|alias| ssh_text.contains(&format!("# semble:begin {}", alias.host_alias)));
 
     Ok(HostPresence {
         host_dir: paths.host_dir(hostname).exists(),
         keys_dir: paths.host_keys_dir(hostname).exists(),
         sops: sops_text.contains(&format!("&{anchor}"))
             || sops_text.contains(&format!("*{anchor}")),
-        ssh_aliases_present,
     })
 }
 
@@ -88,12 +76,6 @@ pub fn assert_hostname_is_new(paths: &RepoPaths, hostname: &str) -> Result<()> {
         conflicts.push(format!(
             "hostname already present in {}",
             paths.sops_config_file().display()
-        ));
-    }
-    if presence.ssh_aliases_present {
-        conflicts.push(format!(
-            "SSH aliases already present in {}",
-            paths.ssh_managed_config_file().display()
         ));
     }
 
@@ -129,47 +111,19 @@ pub fn assert_hostname_exists_for_delete(
         ));
     }
 
-    if [
-        presence.host_dir,
-        presence.keys_dir,
-        presence.sops,
-        presence.ssh_aliases_present,
-    ]
-    .into_iter()
-    .any(|value| value)
+    if [presence.host_dir, presence.keys_dir, presence.sops]
+        .into_iter()
+        .any(|value| value)
     {
         return Ok(());
     }
 
     fail(format!(
-        "refusing to delete host because hostname was not found in any managed location:\n  - host directory: {} (missing)\n  - key directory: {} (missing)\n  - SOPS entry: {} (missing for {hostname})\n  - SSH aliases: {} (missing for {hostname})",
+        "refusing to delete host because hostname was not found in any managed location:\n  - host directory: {} (missing)\n  - key directory: {} (missing)\n  - SOPS entry: {} (missing for {hostname})",
         paths.host_dir(hostname).display(),
         paths.host_keys_dir(hostname).display(),
         paths.sops_config_file().display(),
-        paths.ssh_managed_config_file().display(),
     ))
-}
-
-pub fn add_ssh_aliases(paths: &RepoPaths, hostname: &str, strict: bool) -> Result<bool> {
-    let changed = ssh_config::update_ssh_aliases_add(paths, hostname)?;
-    if strict && !changed {
-        return fail(format!(
-            "SSH aliases already present for {hostname} in {}",
-            paths.ssh_managed_config_file().display()
-        ));
-    }
-    Ok(changed)
-}
-
-pub fn delete_ssh_aliases(paths: &RepoPaths, hostname: &str, strict: bool) -> Result<bool> {
-    let changed = ssh_config::update_ssh_aliases_delete(paths, hostname)?;
-    if strict && !changed {
-        return fail(format!(
-            "SSH aliases not present for {hostname} in {}",
-            paths.ssh_managed_config_file().display()
-        ));
-    }
-    Ok(changed)
 }
 
 pub fn remove_host_files(paths: &RepoPaths, hostname: &str) -> Result<(bool, bool)> {
@@ -200,7 +154,6 @@ pub fn run_host_create(
     let dst_dir = copy_host_template(paths, hostname, force)?;
     ensure_facter_file(&dst_dir)?;
     let keys_dir = generate_ssh_host_keys(paths, hostname, force)?;
-    let ssh_changed = add_ssh_aliases(paths, hostname, false)?;
 
     if !skip_reencrypt {
         let public_key = read_public_key_from_dir(&keys_dir)?;
@@ -208,13 +161,17 @@ pub fn run_host_create(
     }
     let sops_key_path =
         reencrypt_network_yaml(paths, skip_reencrypt, sops_key_file, Some(hostname))?;
+    ssh::run_ssh_setup(paths).map_err(|error| {
+        anyhow::anyhow!(
+            "host was created but failed to refresh generated SSH aliases: {error}"
+        )
+    })?;
     print_create_summary(
         paths,
         &dst_dir,
         &keys_dir,
         !skip_reencrypt,
         sops_key_path.as_deref(),
-        ssh_changed,
     );
     Ok(())
 }
@@ -340,7 +297,7 @@ pub fn run_host_delete(
                 relative_to_root(paths, &paths.network_secrets_file())
             ),
             format!(
-                "remove SSH aliases from {}",
+                "refresh generated SSH aliases at {}",
                 relative_to_root(paths, &paths.ssh_managed_config_file())
             ),
         ],
@@ -361,7 +318,11 @@ pub fn run_host_delete(
         None
     };
     let (removed_host, removed_keys) = remove_host_files(paths, hostname)?;
-    let ssh_changed = delete_ssh_aliases(paths, hostname, false)?;
+    ssh::run_ssh_setup(paths).map_err(|error| {
+        anyhow::anyhow!(
+            "host was deleted but failed to refresh generated SSH aliases: {error}"
+        )
+    })?;
     print_delete_summary(
         paths,
         hostname,
@@ -371,29 +332,8 @@ pub fn run_host_delete(
             reencrypted: sops_changed && !skip_reencrypt,
             sops_changed,
             sops_key_path: sops_key_path.as_deref(),
-            ssh_changed,
         },
     );
-    Ok(())
-}
-
-pub fn run_host_ssh_add(paths: &RepoPaths, hostname: &str) -> Result<()> {
-    if add_ssh_aliases(paths, hostname, true)? {
-        println!(
-            "Added SSH aliases for {hostname} in {}",
-            relative_to_root(paths, &paths.ssh_managed_config_file())
-        );
-    }
-    Ok(())
-}
-
-pub fn run_host_ssh_delete(paths: &RepoPaths, hostname: &str) -> Result<()> {
-    if delete_ssh_aliases(paths, hostname, true)? {
-        println!(
-            "Deleted SSH aliases for {hostname} from {}",
-            relative_to_root(paths, &paths.ssh_managed_config_file())
-        );
-    }
     Ok(())
 }
 
@@ -403,7 +343,6 @@ fn print_create_summary(
     keys_dir: &Path,
     reencrypted: bool,
     sops_key_path: Option<&Path>,
-    ssh_changed: bool,
 ) {
     print!(
         "{}",
@@ -413,7 +352,6 @@ fn print_create_summary(
             keys_dir,
             reencrypted,
             sops_key_path,
-            ssh_changed,
         )
     );
 }
@@ -424,7 +362,6 @@ fn create_summary_text(
     keys_dir: &Path,
     reencrypted: bool,
     sops_key_path: Option<&Path>,
-    ssh_changed: bool,
 ) -> String {
     let mut output = String::new();
     let _ = writeln!(
@@ -439,13 +376,8 @@ fn create_summary_text(
     );
     let _ = writeln!(
         output,
-        "Updated SSH aliases in {} ({})",
+        "Refreshed generated SSH aliases at {}",
         relative_to_root(paths, &paths.ssh_managed_config_file()),
-        if ssh_changed {
-            "yes"
-        } else {
-            "already present"
-        }
     );
     if reencrypted {
         let _ = writeln!(
@@ -524,7 +456,6 @@ struct DeleteSummary<'a> {
     reencrypted: bool,
     sops_changed: bool,
     sops_key_path: Option<&'a Path>,
-    ssh_changed: bool,
 }
 
 fn print_delete_summary(paths: &RepoPaths, hostname: &str, summary: DeleteSummary<'_>) {
@@ -539,9 +470,8 @@ fn print_delete_summary(paths: &RepoPaths, hostname: &str, summary: DeleteSummar
         yes_no(summary.removed_keys)
     );
     println!(
-        "Removed SSH aliases from {} ({})",
+        "Refreshed generated SSH aliases at {}",
         relative_to_root(paths, &paths.ssh_managed_config_file()),
-        yes_no(summary.ssh_changed)
     );
     if summary.sops_changed {
         if summary.reencrypted {
@@ -581,22 +511,16 @@ fn yes_no(value: bool) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::{
-        add_ssh_aliases, assert_hostname_exists_for_delete, assert_hostname_is_new,
-        create_summary_text, delete_ssh_aliases, host_presence, keys_summary_text,
-        validate_hostname,
+        assert_hostname_exists_for_delete, assert_hostname_is_new, create_summary_text,
+        host_presence, keys_summary_text, validate_hostname,
     };
     use crate::repo::RepoPaths;
     use std::fs;
     use tempfile::tempdir;
 
-    const SSH_CONFIG_BASE: &str = r#"Host github.com
-  User git
-
-"#;
-
     const SEMBLE_TOML: &str = r#"[paths]
 hosts_dir = "hosts"
-host_template_dir = "hosts/host.template"
+host_template_dir = "hosts/_template"
 ssh_host_keys_dir = "ssh_host_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"
@@ -630,11 +554,9 @@ creation_rules:
         let root = tempdir.path().to_path_buf();
         fs::create_dir_all(root.join("hosts")).unwrap();
         fs::create_dir_all(root.join("ssh_host_keys")).unwrap();
-        fs::create_dir_all(root.join(".ssh")).unwrap();
         fs::create_dir_all(root.join("secrets")).unwrap();
         fs::write(root.join("semble.toml"), SEMBLE_TOML).unwrap();
         fs::write(root.join(".sops.yaml"), SOPS_BASE).unwrap();
-        fs::write(root.join(".ssh").join("semble_hosts"), SSH_CONFIG_BASE).unwrap();
         (tempdir, RepoPaths::new(root).unwrap())
     }
 
@@ -658,13 +580,6 @@ creation_rules:
             format!("{SOPS_BASE}  - &{hostname} \"ssh-ed25519 AAAATHOR root@{hostname}\"\n"),
         )
         .unwrap();
-        fs::write(
-            paths.ssh_managed_config_file(),
-            format!(
-                "{SSH_CONFIG_BASE}# semble:begin {hostname}-admin\nHost {hostname}-admin\n  HostName {hostname}.baiji-carat.ts.net\n  User admin\n  IdentityFile ~/.ssh/homelab_admin\n  IdentitiesOnly yes\n# semble:end {hostname}-admin\n"
-            ),
-        )
-        .unwrap();
 
         let error = assert_hostname_is_new(&paths, hostname)
             .unwrap_err()
@@ -673,7 +588,6 @@ creation_rules:
         assert!(error.contains("host directory exists"));
         assert!(error.contains("SSH host keys directory exists"));
         assert!(error.contains("hostname already present in"));
-        assert!(error.contains("SSH aliases already present"));
     }
 
     #[test]
@@ -692,49 +606,6 @@ creation_rules:
     }
 
     #[test]
-    fn update_ssh_aliases_add_delete_idempotent() {
-        let (_tempdir, paths) = setup_repo();
-        let changed = add_ssh_aliases(&paths, "thor", false).unwrap();
-        assert!(changed);
-        let text = fs::read_to_string(paths.ssh_managed_config_file()).unwrap();
-        assert!(text.contains("Host thor-admin"));
-        assert!(text.contains("Host thor-deploy"));
-
-        let changed_again = add_ssh_aliases(&paths, "thor", false).unwrap();
-        assert!(!changed_again);
-
-        let removed = delete_ssh_aliases(&paths, "thor", false).unwrap();
-        assert!(removed);
-        let text = fs::read_to_string(paths.ssh_managed_config_file()).unwrap();
-        assert!(!text.contains("Host thor-admin"));
-        assert!(!text.contains("Host thor-deploy"));
-        assert!(text.contains("Host github.com"));
-
-        let removed_again = delete_ssh_aliases(&paths, "thor", false).unwrap();
-        assert!(!removed_again);
-    }
-
-    #[test]
-    fn add_delete_ssh_aliases_strict_mode() {
-        let (_tempdir, paths) = setup_repo();
-        let changed = add_ssh_aliases(&paths, "thor", true).unwrap();
-        assert!(changed);
-
-        let error = add_ssh_aliases(&paths, "thor", true)
-            .unwrap_err()
-            .to_string();
-        assert!(error.contains("already present"));
-
-        let changed = delete_ssh_aliases(&paths, "thor", true).unwrap();
-        assert!(changed);
-
-        let error = delete_ssh_aliases(&paths, "thor", true)
-            .unwrap_err()
-            .to_string();
-        assert!(error.contains("not present"));
-    }
-
-    #[test]
     fn host_presence_reports_repo_state() {
         let (_tempdir, paths) = setup_repo();
         fs::create_dir_all(paths.host_dir("thor")).unwrap();
@@ -743,7 +614,6 @@ creation_rules:
         assert!(presence.host_dir);
         assert!(presence.keys_dir);
         assert!(!presence.sops);
-        assert!(!presence.ssh_aliases_present);
     }
 
     #[test]
@@ -756,11 +626,11 @@ creation_rules:
             &paths.host_keys_dir(hostname),
             false,
             None,
-            true,
         );
 
         assert!(output.contains("Created host scaffold: hosts/thor"));
         assert!(output.contains("Created SSH host keys: ssh_host_keys/thor"));
+        assert!(output.contains("Refreshed generated SSH aliases at .ssh/semble_hosts"));
         assert!(
             output.contains("Next, review and adjust the host-specific settings in hosts/thor/.")
         );

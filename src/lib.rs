@@ -8,7 +8,7 @@ pub mod image;
 pub mod keys;
 pub mod repo;
 pub mod sops;
-pub mod ssh_config;
+pub mod ssh;
 pub mod template;
 
 use anyhow::Result;
@@ -67,20 +67,13 @@ pub fn run(cli: Cli) -> Result<()> {
                     }
                 }
             }
-            HostCommand::Ssh(args) => {
-                let paths = repo::RepoPaths::new(std::env::current_dir()?)?;
-                match args.command {
-                    cli::SshCommand::Add(args) => {
-                        host::validate_hostname(&args.hostname)?;
-                        host::run_host_ssh_add(&paths, &args.hostname)
-                    }
-                    cli::SshCommand::Delete(args) => {
-                        host::validate_hostname(&args.hostname)?;
-                        host::run_host_ssh_delete(&paths, &args.hostname)
-                    }
-                }
-            }
         },
+        Command::Ssh(args) => {
+            let paths = repo::RepoPaths::new(std::env::current_dir()?)?;
+            match args.command {
+                cli::SshCommand::Setup => ssh::run_ssh_setup(&paths),
+            }
+        }
         Command::Image(image) => match image.command {
             ImageCommand::Prepare(args) => {
                 let paths = repo::RepoPaths::new(std::env::current_dir()?)?;
