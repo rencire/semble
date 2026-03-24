@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
-use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -8,8 +7,6 @@ use std::path::{Path, PathBuf};
 pub struct SembleConfig {
     pub paths: PathsConfig,
     pub ssh: SshConfig,
-    #[serde(default)]
-    pub image_prepare: BTreeMap<String, ImagePrepareConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -33,11 +30,6 @@ pub struct SshAliasConfig {
     pub name_suffix: String,
     pub user: String,
     pub identity_file: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct ImagePrepareConfig {
-    pub partition_label: String,
 }
 
 impl SembleConfig {
@@ -69,40 +61,5 @@ mod tests {
         .unwrap();
 
         assert!(SembleConfig::load(tempdir.path()).is_err());
-    }
-
-    #[test]
-    fn parses_image_prepare_config() {
-        let tempdir = tempdir().unwrap();
-        fs::write(
-            tempdir.path().join("semble.toml"),
-            r#"
-[paths]
-hosts_dir = "hosts"
-host_template_dir = "hosts/_template"
-ssh_host_keys_dir = "ssh_host_keys"
-sops_config_file = ".sops.yaml"
-network_secrets_file = "secrets/network.yaml"
-
-[ssh]
-managed_config_file = "~/.ssh/semble_hosts"
-dns_suffix = "example.ts.net"
-
-[[ssh.aliases]]
-name_suffix = "admin"
-user = "admin"
-identity_file = "~/.ssh/id_ed25519"
-
-[image_prepare.vishnu]
-partition_label = "NIXOS_SD"
-"#,
-        )
-        .unwrap();
-
-        let config = SembleConfig::load(tempdir.path()).unwrap();
-        assert_eq!(
-            config.image_prepare.get("vishnu").unwrap().partition_label,
-            "NIXOS_SD"
-        );
     }
 }

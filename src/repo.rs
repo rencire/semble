@@ -1,6 +1,8 @@
-use crate::config::{ImagePrepareConfig, SembleConfig, SshAliasConfig};
+use crate::config::{SembleConfig, SshAliasConfig};
+use anyhow::Context;
 use anyhow::Result;
 use std::env;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
@@ -64,8 +66,16 @@ impl RepoPaths {
         self.root.join(&self.config.paths.host_template_dir)
     }
 
-    pub fn image_prepare_config(&self, image_name: &str) -> Option<&ImagePrepareConfig> {
-        self.config.image_prepare.get(image_name)
+    pub fn image_dir(&self, image_name: &str) -> PathBuf {
+        self.root.join("images").join(image_name)
+    }
+
+    pub fn image_prepare_file(&self, image_name: &str) -> PathBuf {
+        self.image_dir(image_name).join("prepare.toml")
+    }
+
+    pub fn image_prepare_legacy_file(&self, image_name: &str) -> PathBuf {
+        self.root.join("images").join(format!("{image_name}.prepare.toml"))
     }
 
     pub fn ssh_aliases_for_host(&self, hostname: &str) -> Vec<ResolvedSshAlias> {
@@ -85,6 +95,38 @@ impl RepoPaths {
             identity_file: alias.identity_file.clone(),
         }
     }
+}
+
+#[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
+pub struct ImagePrepareConfig {
+    pub partition_label: String,
+}
+
+pub fn load_image_prepare_config(paths: &RepoPaths, image_name: &str) -> Result<ImagePrepareConfig> {
+    let candidates = [
+        paths.image_prepare_file(image_name),
+        paths.image_prepare_legacy_file(image_name),
+    ];
+
+    for prepare_path in candidates {
+        match fs::read_to_string(&prepare_path) {
+            Ok(raw) => {
+                return toml::from_str(&raw)
+                    .with_context(|| format!("failed to parse {}", prepare_path.display()));
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(err) => {
+                return Err(err)
+                    .with_context(|| format!("failed to read {}", prepare_path.display()));
+            }
+        }
+    }
+
+    anyhow::bail!(
+        "missing image prepare config for `{image_name}`; expected {} or {}",
+        paths.image_prepare_file(image_name).display(),
+        paths.image_prepare_legacy_file(image_name).display()
+    )
 }
 
 fn resolve_user_path(path: &Path, root: &Path) -> PathBuf {

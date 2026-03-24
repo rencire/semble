@@ -1,6 +1,6 @@
 use crate::cli::PrepareImageArgs;
-use crate::repo::RepoPaths;
-use anyhow::{anyhow, bail, Context, Result};
+use crate::repo::{load_image_prepare_config, RepoPaths};
+use anyhow::{bail, Context, Result};
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -72,10 +72,7 @@ fn resolve_prepare_config(paths: &RepoPaths, args: PrepareImageArgs) -> Result<P
     let partition_label = if args.skip_inject {
         String::new()
     } else {
-        paths
-            .image_prepare_config(&image_name)
-            .map(|cfg| cfg.partition_label.clone())
-            .ok_or_else(|| anyhow!("missing image prepare config for `{image_name}` in semble.toml"))?
+        load_image_prepare_config(paths, &image_name)?.partition_label
     };
 
     Ok(PreparedImageConfig {
@@ -437,13 +434,14 @@ dns_suffix = "example.ts.net"
 name_suffix = "admin"
 user = "admin"
 identity_file = "~/.ssh/id_ed25519"
-
-[image_prepare.vishnu]
-partition_label = "NIXOS_SD"
-
-[image_prepare.genesis]
-partition_label = "nixos"
 "#,
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("images").join("genesis")).unwrap();
+        fs::write(root.join("images").join("vishnu.prepare.toml"), "partition_label = \"NIXOS_SD\"\n").unwrap();
+        fs::write(
+            root.join("images").join("genesis").join("prepare.toml"),
+            "partition_label = \"nixos\"\n",
         )
         .unwrap();
     }
@@ -474,6 +472,29 @@ partition_label = "nixos"
             tempdir.path().join("ssh_host_keys").join("vishnu")
         );
         assert_eq!(config.output_path, tempdir.path().join("out").join("vishnu.img"));
+    }
+
+    #[test]
+    fn resolve_prepare_config_supports_directory_sidecar() {
+        let tempdir = tempdir().unwrap();
+        write_config(tempdir.path());
+        fs::create_dir_all(tempdir.path().join("ssh_host_keys").join("genesis")).unwrap();
+
+        let paths = RepoPaths::new(tempdir.path()).unwrap();
+        let config = resolve_prepare_config(
+            &paths,
+            PrepareImageArgs {
+                image_name: "genesis".into(),
+                keys_dir: None,
+                output: None,
+                device: None,
+                skip_inject: false,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(config.build_attr, "images.genesis");
+        assert_eq!(config.partition_label, "nixos");
     }
 
     #[test]

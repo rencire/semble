@@ -325,6 +325,21 @@ nix build .#images.installer
 The resulting value is a derivation for the image artifact, not a second host
 definition.
 
+### Image Prepare Metadata
+
+When a consumer uses `semble image prepare`, image-specific preparation metadata
+should live beside the image definition rather than in `semble.toml`.
+
+Semble resolves prepare metadata from either:
+
+- `images/<name>/prepare.toml`
+- `images/<name>.prepare.toml`
+
+Current supported prepare fields:
+
+- `partition_label`: filesystem label of the partition that should receive SSH
+  host keys during injection
+
 ## Modules
 
 Modules live under `modules/` and define Semble-managed options, behavior, and
