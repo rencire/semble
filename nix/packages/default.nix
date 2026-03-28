@@ -1,4 +1,4 @@
 { pkgs }:
 {
-  inherit (pkgs) jj-spr semble;
+  inherit (pkgs) semble;
 }
