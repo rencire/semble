@@ -14,9 +14,34 @@ Image-specific prepare settings live in the image definition itself under
 Typical commands:
 
 ```bash
-semble host create thor
-semble host delete thor --yes
+semble host create atlas
+  # scaffold a new host directory and SSH host keys
+semble host delete atlas --yes
+  # remove a host scaffold and related generated material
 semble ssh setup
-semble host switch thor --ask
-semble host provision thor --target-host thor-deploy
+  # regenerate the managed SSH alias include file
+semble host switch atlas --target-host atlas-deploy --ask
+  # build and switch a host configuration, prompting before activation
+semble host provision atlas --target-host atlas-deploy
+  # install or reinstall NixOS on a remote target host
+```
+
+Command behavior summary:
+- `semble host build <host> [extra args...]`
+  forwards to the equivalent of `tianyi os build . -H <host> [extra args...]`
+- `semble host switch <host> [extra args...]`
+  forwards to the equivalent of `tianyi os switch . -H <host> [extra args...]`
+- `semble host provision <host> [extra args...]`
+  forwards to the equivalent of `tianyi provision . -H <host> [extra args...]`
+
+Remote target note:
+- `host switch` does not currently infer a remote deploy alias on its own
+- for remote NixOS deployment, pass `--target-host` explicitly
+- `atlas-deploy` in the examples is an SSH host alias
+- a normal SSH target such as `deploy@atlas.example.com` or `deploy@192.168.0.40`
+  also works
+- example:
+
+```bash
+semble host switch atlas --target-host atlas-deploy --ask
 ```

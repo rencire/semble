@@ -120,10 +120,10 @@ mod tests {
     #[test]
     fn parses_local_host_commands() {
         let cases = [
-            vec!["semble", "host", "create", "thor"],
-            vec!["semble", "host", "delete", "thor", "--yes"],
-            vec!["semble", "host", "keys", "add", "thor", "--force"],
-            vec!["semble", "host", "keys", "delete", "thor", "--yes"],
+            vec!["semble", "host", "create", "atlas"],
+            vec!["semble", "host", "delete", "atlas", "--yes"],
+            vec!["semble", "host", "keys", "add", "atlas", "--force"],
+            vec!["semble", "host", "keys", "delete", "atlas", "--yes"],
         ];
 
         for args in cases {
@@ -135,13 +135,13 @@ mod tests {
     #[test]
     fn parses_delegated_host_commands() {
         let cases = [
-            vec!["semble", "host", "build", "thor", "--ask"],
-            vec!["semble", "host", "switch", "thor", "--dry-run"],
+            vec!["semble", "host", "build", "atlas", "--ask"],
+            vec!["semble", "host", "switch", "atlas", "--dry-run"],
             vec![
                 "semble",
                 "host",
                 "provision",
-                "thor",
+                "atlas",
                 "--debug",
                 "--phases",
                 "disko,install",

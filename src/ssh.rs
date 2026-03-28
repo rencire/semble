@@ -120,7 +120,7 @@ identity_file = "~/.ssh/homelab_admin"
     fn links_generated_alias_file() {
         let (_tempdir, paths) = setup_repo();
         let generated = paths.root().join("generated-hosts");
-        fs::write(&generated, "Host thor-admin\n").unwrap();
+        fs::write(&generated, "Host atlas-admin\n").unwrap();
 
         link_ssh_aliases(&paths, &generated).unwrap();
 

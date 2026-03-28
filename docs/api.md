@@ -16,7 +16,7 @@ project_root/
 |-- flake.nix
 |-- flake.lock
 |-- hosts/
-|   `-- thor/
+|   `-- atlas/
 |       |-- configuration.nix
 |       `-- default.nix
 |-- images/
@@ -156,9 +156,9 @@ outputs by the consumer.
 Each host lives at `hosts/<name>/default.nix`.
 
 ```nix
-# hosts/thor/default.nix
+# hosts/atlas/default.nix
 {
-  hostName = "thor";
+  hostName = "atlas";
   system = "x86_64-linux";
 
   profiles = [ "base" ];
@@ -230,9 +230,9 @@ If a host needs a different host-local override file, it can set `configFile`
 explicitly:
 
 ```nix
-# hosts/thor/default.nix
+# hosts/atlas/default.nix
 {
-  hostName = "thor";
+  hostName = "atlas";
   system = "x86_64-linux";
 
   profiles = [ "base" ];
@@ -247,7 +247,7 @@ Hosts may also define inline configuration directly in `default.nix`:
 
 ```nix
 {
-  hostName = "thor";
+  hostName = "atlas";
   system = "x86_64-linux";
 
   configuration = {
@@ -277,7 +277,7 @@ If present, the default host-local override file is
 `hosts/<name>/configuration.nix`.
 
 ```nix
-# hosts/thor/configuration.nix
+# hosts/atlas/configuration.nix
 { lib, pkgs, ... }:
 {
   # This is still a regular NixOS module, so standard module arguments are available.
@@ -290,7 +290,7 @@ If present, the default host-local override file is
   services.openssh.enable = true;
 
   # hostName defaults networking.hostName, but it can be overridden here.
-  networking.hostName = "thor-lab";
+  networking.hostName = "atlas-lab";
 }
 ```
 
@@ -305,7 +305,7 @@ Each image lives at `images/<name>/default.nix`.
 ```nix
 # images/installer/default.nix
 {
-  sourceHost = "thor";
+  sourceHost = "atlas";
   buildOutput = "config.system.build.image";
 
   prepare.partitionLabel = "nixos";

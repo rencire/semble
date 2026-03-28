@@ -351,17 +351,17 @@ identity_file = "~/.ssh/homelab_deploy"
     fn updates_sops_yaml_add_and_delete() {
         let (_tempdir, paths) = setup_repo();
         let changed =
-            update_sops_yaml_add(&paths, "thor", "ssh-ed25519 AAAATHOR root@thor").unwrap();
+            update_sops_yaml_add(&paths, "atlas", "ssh-ed25519 AAAAATLAS root@atlas").unwrap();
         assert!(changed);
         let contents = fs::read_to_string(paths.sops_config_file()).unwrap();
-        assert!(contents.contains("&thor \"ssh-ed25519 AAAATHOR root@thor\""));
-        assert!(contents.contains("*thor"));
+        assert!(contents.contains("&atlas \"ssh-ed25519 AAAAATLAS root@atlas\""));
+        assert!(contents.contains("*atlas"));
 
-        let changed = update_sops_yaml_delete(&paths, "thor").unwrap();
+        let changed = update_sops_yaml_delete(&paths, "atlas").unwrap();
         assert!(changed);
         let contents = fs::read_to_string(paths.sops_config_file()).unwrap();
-        assert!(!contents.contains("&thor"));
-        assert!(!contents.contains("*thor"));
+        assert!(!contents.contains("&atlas"));
+        assert!(!contents.contains("*atlas"));
     }
 
     #[test]

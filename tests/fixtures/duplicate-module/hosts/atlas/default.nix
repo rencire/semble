@@ -1,5 +1,5 @@
 {
-  hostName = "thor";
+  hostName = "atlas";
   system = "x86_64-linux";
 
   presets = [ "one" ];

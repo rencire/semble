@@ -53,36 +53,36 @@ mod tests {
     #[test]
     fn builds_host_build_args() {
         let args = DelegatedHostArgs {
-            hostname: String::from("thor"),
+            hostname: String::from("atlas"),
             extra_args: vec![OsString::from("--ask")],
         };
 
         assert_eq!(
             strings(&build_host_args("build", &args)),
-            vec!["os", "build", ".", "-H", "thor", "--ask"]
+            vec!["os", "build", ".", "-H", "atlas", "--ask"]
         );
     }
 
     #[test]
     fn builds_host_switch_args_without_inserting_double_dash() {
         let args = DelegatedHostArgs {
-            hostname: String::from("thor"),
+            hostname: String::from("atlas"),
             extra_args: vec![OsString::from("--dry-run"), OsString::from("--ask")],
         };
 
         assert_eq!(
             strings(&build_host_args("switch", &args)),
-            vec!["os", "switch", ".", "-H", "thor", "--dry-run", "--ask"]
+            vec!["os", "switch", ".", "-H", "atlas", "--dry-run", "--ask"]
         );
     }
 
     #[test]
     fn builds_host_provision_args() {
         let args = DelegatedHostArgs {
-            hostname: String::from("thor"),
+            hostname: String::from("atlas"),
             extra_args: vec![
                 OsString::from("--target-host"),
-                OsString::from("thor-deploy"),
+                OsString::from("atlas-deploy"),
                 OsString::from("--debug"),
             ],
         };
@@ -93,9 +93,9 @@ mod tests {
                 "provision",
                 ".",
                 "-H",
-                "thor",
+                "atlas",
                 "--target-host",
-                "thor-deploy",
+                "atlas-deploy",
                 "--debug",
             ]
         );

@@ -562,22 +562,22 @@ creation_rules:
 
     #[test]
     fn rejects_invalid_hostnames() {
-        assert!(validate_hostname("thor").is_ok());
-        assert!(validate_hostname("thor-01").is_ok());
-        assert!(validate_hostname("Thor").is_err());
-        assert!(validate_hostname("-thor").is_err());
+        assert!(validate_hostname("atlas").is_ok());
+        assert!(validate_hostname("atlas-01").is_ok());
+        assert!(validate_hostname("Atlas").is_err());
+        assert!(validate_hostname("-atlas").is_err());
         assert!(validate_hostname("").is_err());
     }
 
     #[test]
     fn assert_hostname_is_new_reports_conflicts() {
         let (_tempdir, paths) = setup_repo();
-        let hostname = "thor";
+        let hostname = "atlas";
         fs::create_dir_all(paths.host_dir(hostname)).unwrap();
         fs::create_dir_all(paths.host_keys_dir(hostname)).unwrap();
         fs::write(
             paths.sops_config_file(),
-            format!("{SOPS_BASE}  - &{hostname} \"ssh-ed25519 AAAATHOR root@{hostname}\"\n"),
+            format!("{SOPS_BASE}  - &{hostname} \"ssh-ed25519 AAAAATLAS root@{hostname}\"\n"),
         )
         .unwrap();
 
@@ -594,12 +594,12 @@ creation_rules:
     fn assert_hostname_exists_for_delete_requires_presence() {
         let (_tempdir, paths) = setup_repo();
 
-        let error = assert_hostname_exists_for_delete(&paths, "thor", false)
+        let error = assert_hostname_exists_for_delete(&paths, "atlas", false)
             .unwrap_err()
             .to_string();
         assert!(error.contains("hostname was not found"));
 
-        let error = assert_hostname_exists_for_delete(&paths, "thor", true)
+        let error = assert_hostname_exists_for_delete(&paths, "atlas", true)
             .unwrap_err()
             .to_string();
         assert!(error.contains("no key-related entries"));
@@ -608,9 +608,9 @@ creation_rules:
     #[test]
     fn host_presence_reports_repo_state() {
         let (_tempdir, paths) = setup_repo();
-        fs::create_dir_all(paths.host_dir("thor")).unwrap();
-        fs::create_dir_all(paths.host_keys_dir("thor")).unwrap();
-        let presence = host_presence(&paths, "thor").unwrap();
+        fs::create_dir_all(paths.host_dir("atlas")).unwrap();
+        fs::create_dir_all(paths.host_keys_dir("atlas")).unwrap();
+        let presence = host_presence(&paths, "atlas").unwrap();
         assert!(presence.host_dir);
         assert!(presence.keys_dir);
         assert!(!presence.sops);
@@ -619,7 +619,7 @@ creation_rules:
     #[test]
     fn create_summary_is_minimal_and_repo_local() {
         let (_tempdir, paths) = setup_repo();
-        let hostname = "thor";
+        let hostname = "atlas";
         let output = create_summary_text(
             &paths,
             &paths.host_dir(hostname),
@@ -628,11 +628,11 @@ creation_rules:
             None,
         );
 
-        assert!(output.contains("Created host scaffold: hosts/thor"));
-        assert!(output.contains("Created SSH host keys: ssh_host_keys/thor"));
+        assert!(output.contains("Created host scaffold: hosts/atlas"));
+        assert!(output.contains("Created SSH host keys: ssh_host_keys/atlas"));
         assert!(output.contains("Refreshed generated SSH aliases at .ssh/semble_hosts"));
         assert!(
-            output.contains("Next, review and adjust the host-specific settings in hosts/thor/.")
+            output.contains("Next, review and adjust the host-specific settings in hosts/atlas/.")
         );
         assert!(!output.contains("git add"));
         assert!(!output.contains("nix build"));
@@ -643,12 +643,12 @@ creation_rules:
     #[test]
     fn keys_summary_is_minimal_and_repo_local() {
         let (_tempdir, paths) = setup_repo();
-        let hostname = "thor";
+        let hostname = "atlas";
         let output = keys_summary_text(&paths, &paths.host_keys_dir(hostname), false, None);
 
-        assert!(output.contains("Created SSH host keys: ssh_host_keys/thor"));
+        assert!(output.contains("Created SSH host keys: ssh_host_keys/atlas"));
         assert!(output.contains(
-            "Next, review whether the host-specific keys and secret-recipient changes under ssh_host_keys/thor should be kept."
+            "Next, review whether the host-specific keys and secret-recipient changes under ssh_host_keys/atlas should be kept."
         ));
         assert!(!output.contains("Next steps:"));
         assert!(!output.contains("git add"));
