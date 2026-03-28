@@ -1,5 +1,6 @@
 {
   lib,
+  nix,
   rustPlatform,
 }:
 
@@ -14,6 +15,8 @@ rustPlatform.buildRustPackage {
       "tianyi-0.1.0" = "sha256-ZPMENlhHXbLtCSqf9Z0Ja59V35FF723sdFCnRY55d+k=";
     };
   };
+
+  nativeBuildInputs = [ nix ];
 
   meta = {
     description = "Repo-aware host management CLI driven by semble.toml";
