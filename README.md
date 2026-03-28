@@ -14,16 +14,16 @@ Image-specific prepare settings live in the image definition itself under
 Typical commands:
 
 ```bash
+# scaffold a new host directory and SSH host keys
 semble host create atlas
-  # scaffold a new host directory and SSH host keys
+# remove a host scaffold and related generated material
 semble host delete atlas --yes
-  # remove a host scaffold and related generated material
+# regenerate the managed SSH alias include file
 semble ssh setup
-  # regenerate the managed SSH alias include file
+# build and switch a host configuration, prompting before activation
 semble host switch atlas --target-host atlas-deploy --ask
-  # build and switch a host configuration, prompting before activation
+# install or reinstall NixOS on a remote target host
 semble host provision atlas --target-host atlas-deploy
-  # install or reinstall NixOS on a remote target host
 ```
 
 Command behavior summary:
