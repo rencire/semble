@@ -40,6 +40,12 @@ let
     in
     value;
 
+  assertOptionalAttrset = file: field: value:
+    let
+      _ = assertCondition file (builtins.isAttrs value) "field `${field}` must be an attribute set";
+    in
+    value;
+
   assertAllowedFields = file: allowed: value:
     let
       extra = builtins.filter (field: !(builtins.elem field allowed)) (builtins.attrNames value);
@@ -264,20 +270,62 @@ let
     }:
     let
       raw = assertAttrset path (import path);
-      value = assertAllowedFields path [ "host" "format" "efiSupport" "configFile" "configuration" ] raw;
-      host = assertString path "host" (value.host or (fileError path "missing required field `host`"));
-      format = assertString path "format" (value.format or (fileError path "missing required field `format`"));
-      _ = assertCondition path (builtins.elem format [ "raw" ]) "field `format` must be one of: raw";
+      value = assertAllowedFields path [ "host" "sourceHost" "format" "efiSupport" "configFile" "configuration" "modules" "inputModules" "buildOutput" "prepare" ] raw;
+      sourceHost =
+        if value ? sourceHost && value ? host then
+          let
+            sourceHostValue = assertString path "sourceHost" value.sourceHost;
+            hostValue = assertString path "host" value.host;
+            _ = assertCondition path (sourceHostValue == hostValue) "fields `sourceHost` and `host` must match when both are present";
+          in
+          sourceHostValue
+        else if value ? sourceHost then
+          assertString path "sourceHost" value.sourceHost
+        else if value ? host then
+          assertString path "host" value.host
+        else
+          fileError path "missing required field `sourceHost`";
+      format =
+        if value ? format then
+          let
+            formatValue = assertString path "format" value.format;
+            _ = assertCondition path (builtins.elem formatValue [ "raw" ]) "field `format` must be one of: raw";
+          in
+          formatValue
+        else
+          null;
       configuration =
         if value ? configuration then
           assertAttrsOrFunction path "configuration" value.configuration
         else
           { };
+      modules = assertUniqueValues path "module selection" (assertListOfStrings path "modules" (value.modules or [ ]));
+      inputModules = assertUniqueValues path "input module selection" (assertListOfStrings path "inputModules" (value.inputModules or [ ]));
       configFile =
         if value ? configFile then
           assertOptionalPath path "configFile" value.configFile
         else
           toPath "${builtins.dirOf (toString path)}/configuration.nix";
+      buildOutput =
+        if value ? buildOutput then
+          assertString path "buildOutput" value.buildOutput
+        else
+          "config.system.build.image";
+      prepare =
+        if value ? prepare then
+          let
+            prepareValue = assertOptionalAttrset path "prepare" value.prepare;
+            _ = assertAllowedFields path [ "partitionLabel" ] prepareValue;
+          in
+          {
+            partitionLabel =
+              if prepareValue ? partitionLabel then
+                assertString path "prepare.partitionLabel" prepareValue.partitionLabel
+              else
+                null;
+          }
+        else
+          { partitionLabel = null; };
       efiSupport =
         if value ? efiSupport then
           let
@@ -295,7 +343,7 @@ let
         kind = "image";
         inherit relativePath;
       };
-      inherit host format efiSupport configuration configFile;
+      inherit sourceHost format efiSupport configuration configFile modules inputModules buildOutput prepare;
       configFileExplicit = value ? configFile;
     };
 
@@ -415,6 +463,22 @@ let
       lib.getAttrFromPath attrPath input
     else
       fileError file "input `${inputName}` does not expose `${joinDot attrPath}`";
+
+  resolveAttrRef =
+    {
+      file,
+      root,
+      ref,
+      label,
+    }:
+    let
+      parts = lib.splitString "." ref;
+      _ = assertCondition file (parts != [ ]) "${label} `${ref}` must not be empty";
+    in
+    if lib.hasAttrByPath parts root then
+      lib.getAttrFromPath parts root
+    else
+      fileError file "${label} `${ref}` does not exist";
 
   builderSpecialArgs =
     {
@@ -682,7 +746,45 @@ let
       image = requireByKey project.root "image" key project.imagesByKey;
       resolvedHost = resolveHost {
         inherit project;
-        key = image.host;
+        key = image.sourceHost;
+      };
+      explicitImageModuleSelections = collectResolvedItems {
+        file = image.file;
+        label = "image module inclusion";
+        itemType = "module";
+        selections = map
+          (moduleKey: {
+            key = moduleKey;
+            origin = makeOrigin "image" image.key image.file;
+          })
+          image.modules;
+      };
+      imageModuleDefs = map (selection: requireByKey image.file "module" selection.key project.modulesByKey) explicitImageModuleSelections.ordered;
+      explicitImageInputSelections = collectResolvedItems {
+        file = image.file;
+        label = "image input module inclusion";
+        itemType = "input module";
+        selections = map
+          (ref: {
+            key = ref;
+            origin = makeOrigin "image" image.key image.file;
+          })
+          image.inputModules;
+      };
+      transitiveImageInputSelections = lib.concatMap (
+        moduleDef:
+        map
+          (ref: {
+            key = ref;
+            origin = makeOrigin "module" moduleDef.key moduleDef.file;
+          })
+          moduleDef.inputs
+      ) imageModuleDefs;
+      _ = assertNoOverlapWithOrigins {
+        file = image.file;
+        label = "image input module inclusion";
+        explicitSelections = explicitImageInputSelections.ordered;
+        transitiveSelections = transitiveImageInputSelections;
       };
       imageConfigFileModule =
         if builtins.pathExists image.configFile then
@@ -691,7 +793,45 @@ let
           fileError image.file "configFile `${toString image.configFile}` does not exist"
         else
           { };
-      system = project.inputs.nixpkgs.lib.nixosSystem {
+      legacyImageModule =
+        lib.optional (image.format != null || image.efiSupport) (
+          {
+            imports = [ "${project.inputs.nixpkgs}/nixos/modules/virtualisation/disk-image.nix" ];
+            image = lib.optionalAttrs (image.format != null) { inherit (image) format; } // {
+              inherit (image) efiSupport;
+            };
+          }
+        );
+      imageModules =
+        map
+          (moduleDef: makeSembleModule {
+            inherit moduleDef;
+            inherit (project) inputs;
+          })
+          imageModuleDefs
+        ++ map (
+          selection:
+          resolveInputRef {
+            inputs = project.inputs;
+            file = image.file;
+            ref = selection.key;
+          }
+        ) explicitImageInputSelections.ordered
+        ++ legacyImageModule
+        ++ [
+          image.configuration
+          imageConfigFileModule
+        ];
+      builder = resolveBuilderRef {
+        inputs = project.inputs;
+        file = resolvedHost.host.file;
+        ref = resolvedHost.host.builder;
+      };
+      extraSpecialArgs = builderSpecialArgs {
+        inputs = project.inputs;
+        ref = resolvedHost.host.builder;
+      };
+      system = builder {
         system = resolvedHost.host.system;
         specialArgs = {
           inherit (project) inputs;
@@ -700,32 +840,22 @@ let
             resolved = resolvedHost;
             image = image;
           };
-        };
-        modules = resolvedHost.modules ++ [
-          "${project.inputs.nixpkgs}/nixos/modules/virtualisation/disk-image.nix"
-          {
-            image = {
-              inherit (image) format efiSupport;
-            };
-          }
-          image.configuration
-          imageConfigFileModule
-        ];
+        } // extraSpecialArgs;
+        modules = resolvedHost.modules ++ imageModules;
       };
     in
     {
       inherit image resolvedHost system;
-      modules = resolvedHost.modules ++ [
-        "${project.inputs.nixpkgs}/nixos/modules/virtualisation/disk-image.nix"
-        {
-          image = {
-            inherit (image) format efiSupport;
-          };
-        }
-        image.configuration
-        imageConfigFileModule
-      ];
-      build = system.config.system.build.image;
+      moduleDefs = imageModuleDefs;
+      explicitInputSelections = explicitImageInputSelections.ordered;
+      transitiveInputSelections = transitiveImageInputSelections;
+      modules = resolvedHost.modules ++ imageModules;
+      build = resolveAttrRef {
+        file = image.file;
+        root = system;
+        ref = image.buildOutput;
+        label = "buildOutput";
+      };
     };
 
   mkFlake =

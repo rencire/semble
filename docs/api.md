@@ -305,9 +305,17 @@ Each image lives at `images/<name>/default.nix`.
 ```nix
 # images/installer/default.nix
 {
-  host = "thor";
-  format = "raw";
-  efiSupport = true;
+  sourceHost = "thor";
+  buildOutput = "config.system.build.image";
+
+  prepare.partitionLabel = "nixos";
+
+  configuration = {
+    image = {
+      format = "raw";
+      efiSupport = true;
+    };
+  };
 }
 ```
 
@@ -316,18 +324,30 @@ replace host definitions or duplicate host composition.
 
 Supported image fields:
 
-- `host`: The host key to package into a boot artifact.
-- `format`: The output image format. v0.3 supports `"raw"`.
-- `efiSupport`: Whether the produced image should be EFI-bootable.
+- `sourceHost`: The host key to package into a boot artifact.
+- `modules`: Optional local Semble module keys to include only for this image.
+- `inputModules`: Optional raw input module references to include only for this
+  image.
+- `buildOutput`: Attr-path string selecting the final build artifact from the
+  evaluated image system, for example `config.system.build.image` or
+  `config.system.build.sdImage`.
+- `prepare.partitionLabel`: Optional Semble image-prepare metadata for SSH host
+  key injection.
 - `configuration`: Optional inline image-local module content.
 - `configFile`: Optional path to an image-local module file. Defaults to
   `./configuration.nix`.
 
+Legacy compatibility:
+
+- `host` is accepted temporarily as an alias for `sourceHost`
+- `format` and `efiSupport` are accepted temporarily as convenience sugar for
+  the `nixpkgs` disk-image module path
+
 ### Image Resolution Rule
 
 Images are always resolved from an existing host definition. Semble first
-resolves the referenced host through the normal host pipeline, then appends the
-image-specific packaging module stack.
+resolves the referenced source host through the normal host pipeline, then
+appends the image-specific packaging module stack.
 
 That means images own artifact packaging, while hosts continue to own system
 behavior.
@@ -347,8 +367,8 @@ Images may also define inline configuration directly in `default.nix`:
 
 ```nix
 {
-  host = "installer";
-  format = "raw";
+  sourceHost = "installer";
+  buildOutput = "config.system.build.image";
 
   configuration = {
     image.efiSupport = true;
@@ -363,17 +383,12 @@ Semble treats it as empty.
 ### Image Prepare Metadata
 
 When a consumer uses `semble image prepare`, image-specific preparation metadata
-should live beside the image definition rather than in `semble.toml`.
-
-Semble resolves prepare metadata from either:
-
-- `images/<name>/prepare.toml`
-- `images/<name>.prepare.toml`
+lives in the image definition itself.
 
 Current supported prepare fields:
 
-- `partition_label`: filesystem label of the partition that should receive SSH
-  host keys during injection
+- `prepare.partitionLabel`: filesystem label of the partition that should
+  receive SSH host keys during injection
 
 ## Modules
 
