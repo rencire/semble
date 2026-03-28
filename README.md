@@ -8,10 +8,8 @@ It expects the target repo to define a root-level `semble.toml` that specifies:
 - the SSH symlink path to refresh during `ssh setup`
 - SSH alias conventions such as DNS suffix, users, and identity files
 
-Image-specific prepare settings live beside the image definition rather than in
-`semble.toml`. Semble looks for either:
-- `images/<name>/prepare.toml`
-- `images/<name>.prepare.toml`
+Image-specific prepare settings live in the image definition itself under
+`prepare.partitionLabel`, not in `semble.toml`.
 
 Typical commands:
 

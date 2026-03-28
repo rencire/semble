@@ -901,6 +901,22 @@ let
           inherit project key;
         }).build
       ) project.imagesByKey;
+
+      _semble = {
+        images = lib.mapAttrs (
+          key: _:
+          let
+            resolvedImage = resolveImage {
+              inherit project key;
+            };
+          in
+          {
+            sourceHost = resolvedImage.image.sourceHost;
+            buildOutput = resolvedImage.image.buildOutput;
+            prepare = resolvedImage.image.prepare;
+          }
+        ) project.imagesByKey;
+      };
     };
 in
 {

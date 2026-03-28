@@ -4,6 +4,7 @@ use anyhow::Result;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 #[derive(Debug, Clone)]
 pub struct RepoPaths {
@@ -103,6 +104,60 @@ pub struct ImagePrepareConfig {
 }
 
 pub fn load_image_prepare_config(paths: &RepoPaths, image_name: &str) -> Result<ImagePrepareConfig> {
+    if let Some(config) = load_image_prepare_config_from_nix(paths, image_name)? {
+        return Ok(config);
+    }
+
+    load_image_prepare_config_from_sidecars(paths, image_name)
+}
+
+fn load_image_prepare_config_from_nix(paths: &RepoPaths, image_name: &str) -> Result<Option<ImagePrepareConfig>> {
+    #[derive(Debug, serde::Deserialize)]
+    struct FlakePrepare {
+        #[serde(rename = "partitionLabel")]
+        partition_label: Option<String>,
+    }
+
+    #[derive(Debug, serde::Deserialize)]
+    struct FlakeImageMetadata {
+        prepare: Option<FlakePrepare>,
+    }
+
+    let canonical_root = paths
+        .root()
+        .canonicalize()
+        .with_context(|| format!("failed to canonicalize {}", paths.root().display()))?;
+    let expr = format!(
+        "let flake = builtins.getFlake (toString {}); in flake._semble.images.\"{}\" or null",
+        canonical_root.display(),
+        image_name
+    );
+    let output = Command::new("nix")
+        .args(["eval", "--impure", "--json", "--expr", &expr])
+        .current_dir(paths.root())
+        .output();
+
+    let output = match output {
+        Ok(output) => output,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(err).context("failed to run `nix eval` for image metadata"),
+    };
+
+    if !output.status.success() {
+        return Ok(None);
+    }
+
+    let metadata: Option<FlakeImageMetadata> =
+        serde_json::from_slice(&output.stdout).context("failed to parse image metadata from `nix eval`")?;
+
+    Ok(metadata.and_then(|metadata| {
+        metadata.prepare.and_then(|prepare| {
+            prepare.partition_label.map(|partition_label| ImagePrepareConfig { partition_label })
+        })
+    }))
+}
+
+fn load_image_prepare_config_from_sidecars(paths: &RepoPaths, image_name: &str) -> Result<ImagePrepareConfig> {
     let candidates = [
         paths.image_prepare_file(image_name),
         paths.image_prepare_legacy_file(image_name),
@@ -141,5 +196,70 @@ fn resolve_user_path(path: &Path, root: &Path) -> PathBuf {
         path.to_path_buf()
     } else {
         root.join(path)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{load_image_prepare_config, ImagePrepareConfig, RepoPaths};
+    use std::fs;
+    use std::path::Path;
+    use tempfile::tempdir;
+
+    fn write_minimal_semble_toml(root: &Path) {
+        fs::write(
+            root.join("semble.toml"),
+            r#"
+[paths]
+hosts_dir = "hosts"
+host_template_dir = "hosts/_template"
+ssh_host_keys_dir = "ssh_host_keys"
+sops_config_file = ".sops.yaml"
+network_secrets_file = "secrets/network.yaml"
+
+[ssh]
+managed_config_file = "~/.ssh/semble_hosts"
+dns_suffix = "example.ts.net"
+
+[[ssh.aliases]]
+name_suffix = "admin"
+user = "admin"
+identity_file = "~/.ssh/id_ed25519"
+"#,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn prefers_nix_image_metadata_when_available() {
+        let tempdir = tempdir().unwrap();
+        write_minimal_semble_toml(tempdir.path());
+        fs::write(
+            tempdir.path().join("flake.nix"),
+            r#"
+{
+  outputs = { self }: {
+    _semble.images.vishnu.prepare.partitionLabel = "NIXOS_SD";
+  };
+}
+"#,
+        )
+        .unwrap();
+        fs::create_dir_all(tempdir.path().join("images")).unwrap();
+        fs::write(
+            tempdir.path().join("images").join("vishnu.prepare.toml"),
+            "partition_label = \"WRONG\"\n",
+        )
+        .unwrap();
+
+        let paths = RepoPaths::new(tempdir.path()).unwrap();
+        let config = load_image_prepare_config(&paths, "vishnu").unwrap();
+
+        assert_eq!(
+            config,
+            ImagePrepareConfig {
+                partition_label: "NIXOS_SD".into()
+            }
+        );
     }
 }
