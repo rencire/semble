@@ -2,7 +2,6 @@ use crate::config::{SembleConfig, SshAliasConfig};
 use anyhow::Context;
 use anyhow::Result;
 use std::env;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -67,18 +66,6 @@ impl RepoPaths {
         self.root.join(&self.config.paths.host_template_dir)
     }
 
-    pub fn image_dir(&self, image_name: &str) -> PathBuf {
-        self.root.join("images").join(image_name)
-    }
-
-    pub fn image_prepare_file(&self, image_name: &str) -> PathBuf {
-        self.image_dir(image_name).join("prepare.toml")
-    }
-
-    pub fn image_prepare_legacy_file(&self, image_name: &str) -> PathBuf {
-        self.root.join("images").join(format!("{image_name}.prepare.toml"))
-    }
-
     pub fn ssh_aliases_for_host(&self, hostname: &str) -> Vec<ResolvedSshAlias> {
         self.config
             .ssh
@@ -104,11 +91,11 @@ pub struct ImagePrepareConfig {
 }
 
 pub fn load_image_prepare_config(paths: &RepoPaths, image_name: &str) -> Result<ImagePrepareConfig> {
-    if let Some(config) = load_image_prepare_config_from_nix(paths, image_name)? {
-        return Ok(config);
-    }
-
-    load_image_prepare_config_from_sidecars(paths, image_name)
+    load_image_prepare_config_from_nix(paths, image_name)?.ok_or_else(|| {
+        anyhow::anyhow!(
+            "missing image prepare metadata for `{image_name}`; expected `prepare.partitionLabel` in the image definition"
+        )
+    })
 }
 
 fn load_image_prepare_config_from_nix(paths: &RepoPaths, image_name: &str) -> Result<Option<ImagePrepareConfig>> {
@@ -155,33 +142,6 @@ fn load_image_prepare_config_from_nix(paths: &RepoPaths, image_name: &str) -> Re
             prepare.partition_label.map(|partition_label| ImagePrepareConfig { partition_label })
         })
     }))
-}
-
-fn load_image_prepare_config_from_sidecars(paths: &RepoPaths, image_name: &str) -> Result<ImagePrepareConfig> {
-    let candidates = [
-        paths.image_prepare_file(image_name),
-        paths.image_prepare_legacy_file(image_name),
-    ];
-
-    for prepare_path in candidates {
-        match fs::read_to_string(&prepare_path) {
-            Ok(raw) => {
-                return toml::from_str(&raw)
-                    .with_context(|| format!("failed to parse {}", prepare_path.display()));
-            }
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(err) => {
-                return Err(err)
-                    .with_context(|| format!("failed to read {}", prepare_path.display()));
-            }
-        }
-    }
-
-    anyhow::bail!(
-        "missing image prepare config for `{image_name}`; expected {} or {}",
-        paths.image_prepare_file(image_name).display(),
-        paths.image_prepare_legacy_file(image_name).display()
-    )
 }
 
 fn resolve_user_path(path: &Path, root: &Path) -> PathBuf {
@@ -245,10 +205,15 @@ identity_file = "~/.ssh/id_ed25519"
 "#,
         )
         .unwrap();
-        fs::create_dir_all(tempdir.path().join("images")).unwrap();
         fs::write(
-            tempdir.path().join("images").join("vishnu.prepare.toml"),
-            "partition_label = \"WRONG\"\n",
+            tempdir.path().join("flake.nix"),
+            r#"
+{
+  outputs = { self }: {
+    _semble.images.vishnu.prepare.partitionLabel = "NIXOS_SD";
+  };
+}
+"#,
         )
         .unwrap();
 

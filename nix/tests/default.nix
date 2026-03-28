@@ -61,7 +61,6 @@ let
   beaconConfig = flake.nixosConfigurations.beacon.config;
   cedarConfig = flake.nixosConfigurations.cedar.config;
   installerImage = flake.images.installer;
-  legacyImage = flake.images.legacy;
   installerConfig = resolvedImage.system.config;
 
   expectFailure =
@@ -83,7 +82,7 @@ in
   discoveredHosts = assert (builtins.attrNames project.hostsByKey == [ "atlas" "beacon" "cedar" ]); true;
   discoveredModules = assert (builtins.attrNames project.modulesByKey == [ "branding" "extra" "security.sops" ]); true;
   discoveredPresets = assert (builtins.attrNames project.presetsByKey == [ "base" "security.sopsDefault" ]); true;
-  discoveredImages = assert (builtins.attrNames project.imagesByKey == [ "installer" "legacy" ]); true;
+  discoveredImages = assert (builtins.attrNames project.imagesByKey == [ "installer" ]); true;
   presetResolution = assert (map (preset: preset.key) resolved.presetDefs == [ "base" "security.sopsDefault" ]); true;
   moduleResolution = assert (map (moduleDef: moduleDef.key) resolved.moduleDefs == [ "branding" "security.sops" "extra" ]); true;
   imageResolution = assert (resolvedImage.image.sourceHost == "atlas"); true;
@@ -91,7 +90,6 @@ in
   imageInputResolution = assert (map (selection: selection.key) resolvedImage.explicitInputSelections == [ "fake.direct" ]); true;
   imagePrepareMetadata = assert (resolvedImage.image.prepare.partitionLabel == "NIXOS_SD"); true;
   imageBuildLooksLikeDerivation = assert (builtins.hasAttr "drvPath" installerImage); true;
-  legacyImageBuildLooksLikeDerivation = assert (builtins.hasAttr "drvPath" legacyImage); true;
   hostConfigWins = assert (hostConfig.environment.variables.SEMBLE_MESSAGE == "from-host"); true;
   hostInlineConfigurationApplies = assert (hostConfig.environment.variables.SEMBLE_INLINE == "from-inline"); true;
   hostInlineAndConfigFileMerge = assert (cedarConfig.environment.variables.CEDAR_INLINE == "enabled"); true;

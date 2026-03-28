@@ -337,12 +337,6 @@ Supported image fields:
 - `configFile`: Optional path to an image-local module file. Defaults to
   `./configuration.nix`.
 
-Legacy compatibility:
-
-- `host` is accepted temporarily as an alias for `sourceHost`
-- `format` and `efiSupport` are accepted temporarily as convenience sugar for
-  the `nixpkgs` disk-image module path
-
 ### Image Resolution Rule
 
 Images are always resolved from an existing host definition. Semble first

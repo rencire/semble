@@ -437,11 +437,16 @@ identity_file = "~/.ssh/id_ed25519"
 "#,
         )
         .unwrap();
-        fs::create_dir_all(root.join("images").join("genesis")).unwrap();
-        fs::write(root.join("images").join("vishnu.prepare.toml"), "partition_label = \"NIXOS_SD\"\n").unwrap();
         fs::write(
-            root.join("images").join("genesis").join("prepare.toml"),
-            "partition_label = \"nixos\"\n",
+            root.join("flake.nix"),
+            r#"
+{
+  outputs = { self }: {
+    _semble.images.vishnu.prepare.partitionLabel = "NIXOS_SD";
+    _semble.images.genesis.prepare.partitionLabel = "nixos";
+  };
+}
+"#,
         )
         .unwrap();
     }
@@ -475,7 +480,7 @@ identity_file = "~/.ssh/id_ed25519"
     }
 
     #[test]
-    fn resolve_prepare_config_supports_directory_sidecar() {
+    fn resolve_prepare_config_reads_prepare_metadata_for_multiple_images() {
         let tempdir = tempdir().unwrap();
         write_config(tempdir.path());
         fs::create_dir_all(tempdir.path().join("ssh_host_keys").join("genesis")).unwrap();

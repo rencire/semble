@@ -270,30 +270,8 @@ let
     }:
     let
       raw = assertAttrset path (import path);
-      value = assertAllowedFields path [ "host" "sourceHost" "format" "efiSupport" "configFile" "configuration" "modules" "inputModules" "buildOutput" "prepare" ] raw;
-      sourceHost =
-        if value ? sourceHost && value ? host then
-          let
-            sourceHostValue = assertString path "sourceHost" value.sourceHost;
-            hostValue = assertString path "host" value.host;
-            _ = assertCondition path (sourceHostValue == hostValue) "fields `sourceHost` and `host` must match when both are present";
-          in
-          sourceHostValue
-        else if value ? sourceHost then
-          assertString path "sourceHost" value.sourceHost
-        else if value ? host then
-          assertString path "host" value.host
-        else
-          fileError path "missing required field `sourceHost`";
-      format =
-        if value ? format then
-          let
-            formatValue = assertString path "format" value.format;
-            _ = assertCondition path (builtins.elem formatValue [ "raw" ]) "field `format` must be one of: raw";
-          in
-          formatValue
-        else
-          null;
+      value = assertAllowedFields path [ "sourceHost" "configFile" "configuration" "modules" "inputModules" "buildOutput" "prepare" ] raw;
+      sourceHost = assertString path "sourceHost" (value.sourceHost or (fileError path "missing required field `sourceHost`"));
       configuration =
         if value ? configuration then
           assertAttrsOrFunction path "configuration" value.configuration
@@ -326,15 +304,6 @@ let
           }
         else
           { partitionLabel = null; };
-      efiSupport =
-        if value ? efiSupport then
-          let
-            enabled = value.efiSupport;
-            __ = assertCondition path (builtins.isBool enabled) "field `efiSupport` must be a boolean";
-          in
-          enabled
-        else
-          false;
     in
     {
       file = path;
@@ -343,7 +312,7 @@ let
         kind = "image";
         inherit relativePath;
       };
-      inherit sourceHost format efiSupport configuration configFile modules inputModules buildOutput prepare;
+      inherit sourceHost configuration configFile modules inputModules buildOutput prepare;
       configFileExplicit = value ? configFile;
     };
 
@@ -793,15 +762,6 @@ let
           fileError image.file "configFile `${toString image.configFile}` does not exist"
         else
           { };
-      legacyImageModule =
-        lib.optional (image.format != null || image.efiSupport) (
-          {
-            imports = [ "${project.inputs.nixpkgs}/nixos/modules/virtualisation/disk-image.nix" ];
-            image = lib.optionalAttrs (image.format != null) { inherit (image) format; } // {
-              inherit (image) efiSupport;
-            };
-          }
-        );
       imageModules =
         map
           (moduleDef: makeSembleModule {
@@ -817,7 +777,6 @@ let
             ref = selection.key;
           }
         ) explicitImageInputSelections.ordered
-        ++ legacyImageModule
         ++ [
           image.configuration
           imageConfigFileModule
