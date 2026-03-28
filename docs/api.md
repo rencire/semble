@@ -185,6 +185,7 @@ Supported host fields:
 - `inputModules`: A list of raw input module references to include directly for this host. This is the raw upstream layer for cases where a local Semble abstraction is not needed yet.
 - `configFile`: Optional path to a host-local override module. Defaults to
   `./configuration.nix`.
+- `configuration`: Optional inline host-local module content.
 - `ssh.aliases`: Optional list overriding generated SSH client aliases for this host.
   - if omitted, consumers may apply repo-wide defaults such as aliases from `semble.toml`
   - if set to `[]`, no SSH aliases are generated for the host
@@ -242,6 +243,19 @@ explicitly:
 }
 ```
 
+Hosts may also define inline configuration directly in `default.nix`:
+
+```nix
+{
+  hostName = "thor";
+  system = "x86_64-linux";
+
+  configuration = {
+    services.openssh.enable = true;
+  };
+}
+```
+
 Hosts that need a non-default constructor can override `builder`:
 
 ```nix
@@ -280,8 +294,9 @@ If present, the default host-local override file is
 }
 ```
 
-This file is optional. If `configFile` is omitted and `./configuration.nix`
-does not exist, Semble should treat it as empty.
+`configuration` and `configFile` may both be present. Semble includes both as
+modules. If `configFile` is omitted and `./configuration.nix` does not exist,
+Semble should treat it as empty.
 
 ## Images
 
@@ -304,6 +319,9 @@ Supported image fields:
 - `host`: The host key to package into a boot artifact.
 - `format`: The output image format. v0.3 supports `"raw"`.
 - `efiSupport`: Whether the produced image should be EFI-bootable.
+- `configuration`: Optional inline image-local module content.
+- `configFile`: Optional path to an image-local module file. Defaults to
+  `./configuration.nix`.
 
 ### Image Resolution Rule
 
@@ -324,6 +342,23 @@ nix build .#images.installer
 
 The resulting value is a derivation for the image artifact, not a second host
 definition.
+
+Images may also define inline configuration directly in `default.nix`:
+
+```nix
+{
+  host = "installer";
+  format = "raw";
+
+  configuration = {
+    image.efiSupport = true;
+  };
+}
+```
+
+`configuration` and `configFile` may both be present. Semble includes both as
+modules. If `configFile` is omitted and `./configuration.nix` does not exist,
+Semble treats it as empty.
 
 ### Image Prepare Metadata
 

@@ -61,6 +61,7 @@ let
   beaconConfig = flake.nixosConfigurations.beacon.config;
   cedarConfig = flake.nixosConfigurations.cedar.config;
   installerImage = flake.images.installer;
+  installerConfig = resolvedImage.system.config;
 
   expectFailure =
     root:
@@ -87,6 +88,8 @@ in
   imageResolution = assert (resolvedImage.image.host == "atlas"); true;
   imageBuildLooksLikeDerivation = assert (builtins.hasAttr "drvPath" installerImage); true;
   hostConfigWins = assert (hostConfig.environment.variables.SEMBLE_MESSAGE == "from-host"); true;
+  hostInlineConfigurationApplies = assert (hostConfig.environment.variables.SEMBLE_INLINE == "from-inline"); true;
+  hostInlineAndConfigFileMerge = assert (cedarConfig.environment.variables.CEDAR_INLINE == "enabled"); true;
   hostModulesApply = assert (hostConfig.environment.variables.EXTRA_MODULE == "enabled"); true;
   hostNameOrder = assert (hostConfig.networking.hostName == "atlas-lab"); true;
   defaultHostNameWins = assert (beaconConfig.networking.hostName == "beacon"); true;
@@ -96,6 +99,8 @@ in
   presetInputModulesApply = assert (hostConfig.environment.variables.FAKE_BUNDLE == "enabled"); true;
   hostInputModulesApply = assert (hostConfig.environment.variables.FAKE_DIRECT == "enabled"); true;
   customHostBuilderApplies = assert (cedarConfig.environment.variables.FAKE_SYSTEM_BUILDER == "nixosSystemFull"); true;
+  imageInlineConfigurationApplies = assert (installerConfig.environment.variables.IMAGE_INLINE == "enabled"); true;
+  imageConfigFileApplies = assert (installerConfig.environment.variables.IMAGE_FILE == "enabled"); true;
   duplicatePresetFails = expectFailure duplicatePresetRoot;
   duplicateModuleFails = expectFailure duplicateModuleRoot;
   duplicateInputOverlapFails = expectFailure duplicateInputOverlapRoot;

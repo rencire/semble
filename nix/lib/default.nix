@@ -150,7 +150,7 @@ let
     }:
     let
       raw = assertAttrset path (import path);
-      value = assertAllowedFields path [ "hostName" "system" "builder" "profiles" "presets" "modules" "inputModules" "configFile" ] raw;
+      value = assertAllowedFields path [ "hostName" "system" "builder" "profiles" "presets" "modules" "inputModules" "configFile" "configuration" ] raw;
       hostName = assertString path "hostName" (value.hostName or (fileError path "missing required field `hostName`"));
       system = assertString path "system" (value.system or (fileError path "missing required field `system`"));
       builder = assertString path "builder" (value.builder or "nixpkgs.lib.nixosSystem");
@@ -158,6 +158,11 @@ let
       presets = assertUniqueValues path "preset selection" (assertListOfStrings path "presets" (value.presets or [ ]));
       modules = assertUniqueValues path "module selection" (assertListOfStrings path "modules" (value.modules or [ ]));
       inputModules = assertUniqueValues path "input module selection" (assertListOfStrings path "inputModules" (value.inputModules or [ ]));
+      configuration =
+        if value ? configuration then
+          assertAttrsOrFunction path "configuration" value.configuration
+        else
+          { };
       configFile =
         if value ? configFile then
           assertOptionalPath path "configFile" value.configFile
@@ -171,7 +176,7 @@ let
         kind = "host";
         inherit relativePath;
       };
-      inherit hostName system builder profiles presets modules inputModules configFile;
+      inherit hostName system builder profiles presets modules inputModules configuration configFile;
       configFileExplicit = value ? configFile;
     };
 
@@ -259,10 +264,20 @@ let
     }:
     let
       raw = assertAttrset path (import path);
-      value = assertAllowedFields path [ "host" "format" "efiSupport" ] raw;
+      value = assertAllowedFields path [ "host" "format" "efiSupport" "configFile" "configuration" ] raw;
       host = assertString path "host" (value.host or (fileError path "missing required field `host`"));
       format = assertString path "format" (value.format or (fileError path "missing required field `format`"));
       _ = assertCondition path (builtins.elem format [ "raw" ]) "field `format` must be one of: raw";
+      configuration =
+        if value ? configuration then
+          assertAttrsOrFunction path "configuration" value.configuration
+        else
+          { };
+      configFile =
+        if value ? configFile then
+          assertOptionalPath path "configFile" value.configFile
+        else
+          toPath "${builtins.dirOf (toString path)}/configuration.nix";
       efiSupport =
         if value ? efiSupport then
           let
@@ -280,7 +295,8 @@ let
         kind = "image";
         inherit relativePath;
       };
-      inherit host format efiSupport;
+      inherit host format efiSupport configuration configFile;
+      configFileExplicit = value ? configFile;
     };
 
   discoverKind =
@@ -618,7 +634,7 @@ let
         explicitSelections = explicitInputSelections.ordered;
         inherit transitiveInputSelections;
       };
-      hostConfigModule =
+      hostConfigFileModule =
         if builtins.pathExists host.configFile then
           host.configFile
         else if host.configFileExplicit then
@@ -652,7 +668,8 @@ let
           {
             config.networking.hostName = lib.mkOverride 150 host.hostName;
           }
-          hostConfigModule
+          host.configuration
+          hostConfigFileModule
         ];
     };
 
@@ -667,9 +684,37 @@ let
         inherit project;
         key = image.host;
       };
+      imageConfigFileModule =
+        if builtins.pathExists image.configFile then
+          image.configFile
+        else if image.configFileExplicit then
+          fileError image.file "configFile `${toString image.configFile}` does not exist"
+        else
+          { };
+      system = project.inputs.nixpkgs.lib.nixosSystem {
+        system = resolvedHost.host.system;
+        specialArgs = {
+          inherit (project) inputs;
+          semble = {
+            inherit project;
+            resolved = resolvedHost;
+            image = image;
+          };
+        };
+        modules = resolvedHost.modules ++ [
+          "${project.inputs.nixpkgs}/nixos/modules/virtualisation/disk-image.nix"
+          {
+            image = {
+              inherit (image) format efiSupport;
+            };
+          }
+          image.configuration
+          imageConfigFileModule
+        ];
+      };
     in
     {
-      inherit image resolvedHost;
+      inherit image resolvedHost system;
       modules = resolvedHost.modules ++ [
         "${project.inputs.nixpkgs}/nixos/modules/virtualisation/disk-image.nix"
         {
@@ -677,27 +722,10 @@ let
             inherit (image) format efiSupport;
           };
         }
+        image.configuration
+        imageConfigFileModule
       ];
-      build =
-        (project.inputs.nixpkgs.lib.nixosSystem {
-          system = resolvedHost.host.system;
-          specialArgs = {
-            inherit (project) inputs;
-            semble = {
-              inherit project;
-              resolved = resolvedHost;
-              image = image;
-            };
-          };
-          modules = resolvedHost.modules ++ [
-            "${project.inputs.nixpkgs}/nixos/modules/virtualisation/disk-image.nix"
-            {
-              image = {
-                inherit (image) format efiSupport;
-              };
-            }
-          ];
-        }).config.system.build.image;
+      build = system.config.system.build.image;
     };
 
   mkFlake =

@@ -4,4 +4,7 @@
   builder = "fake.lib.nixosSystemFull";
 
   presets = [ "base" ];
+  configuration = {
+    environment.variables.CEDAR_INLINE = "enabled";
+  };
 }
