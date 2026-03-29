@@ -95,7 +95,7 @@ dns_suffix = "baiji-carat.ts.net"
 [[ssh.aliases]]
 name_suffix = "admin"
 user = "admin"
-identity_file = "~/.ssh/homelab_admin"
+identity_file = "~/.ssh/admin_key"
 "#;
 
     fn setup_repo() -> (tempfile::TempDir, RepoPaths) {

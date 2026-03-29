@@ -281,7 +281,7 @@ mod tests {
     use tempfile::tempdir;
 
     const SOPS_BASE: &str = r#"keys:
-  - &genesis "ssh-ed25519 AAAABASE root@genesis"
+  - &genesis "PUBLIC_KEY_GENESIS"
 creation_rules:
   - path_regex: secrets/network\.(yaml|json|env|ini)$
     key_groups:
@@ -303,12 +303,12 @@ dns_suffix = "baiji-carat.ts.net"
 [[ssh.aliases]]
 name_suffix = "admin"
 user = "admin"
-identity_file = "~/.ssh/homelab_admin"
+identity_file = "~/.ssh/admin_key"
 
 [[ssh.aliases]]
 name_suffix = "deploy"
 user = "deploy"
-identity_file = "~/.ssh/homelab_deploy"
+identity_file = "~/.ssh/deploy_key"
 "#;
 
     fn setup_repo() -> (tempfile::TempDir, RepoPaths) {
@@ -330,7 +330,7 @@ identity_file = "~/.ssh/homelab_deploy"
             root.join("ssh_host_keys")
                 .join("genesis")
                 .join("ssh_host_ed25519_key.pub"),
-            "ssh-ed25519 AAAABASE root@genesis\n",
+            "PUBLIC_KEY_GENESIS\n",
         )
         .unwrap();
         (tempdir, RepoPaths::new(root).unwrap())
@@ -342,7 +342,7 @@ identity_file = "~/.ssh/homelab_deploy"
         let aliases = sops_key_aliases(&paths).unwrap();
         assert_eq!(
             aliases.get("genesis"),
-            Some(&"ssh-ed25519 AAAABASE root@genesis".to_string())
+            Some(&"PUBLIC_KEY_GENESIS".to_string())
         );
         assert_eq!(network_rule_aliases(&paths).unwrap(), vec!["genesis"]);
     }
@@ -351,10 +351,10 @@ identity_file = "~/.ssh/homelab_deploy"
     fn updates_sops_yaml_add_and_delete() {
         let (_tempdir, paths) = setup_repo();
         let changed =
-            update_sops_yaml_add(&paths, "atlas", "ssh-ed25519 AAAAATLAS root@atlas").unwrap();
+            update_sops_yaml_add(&paths, "atlas", "PUBLIC_KEY_ATLAS").unwrap();
         assert!(changed);
         let contents = fs::read_to_string(paths.sops_config_file()).unwrap();
-        assert!(contents.contains("&atlas \"ssh-ed25519 AAAAATLAS root@atlas\""));
+        assert!(contents.contains("&atlas \"PUBLIC_KEY_ATLAS\""));
         assert!(contents.contains("*atlas"));
 
         let changed = update_sops_yaml_delete(&paths, "atlas").unwrap();
@@ -368,7 +368,7 @@ identity_file = "~/.ssh/homelab_deploy"
     fn finds_network_rule_recipients_and_autodetects_key() {
         let (_tempdir, paths) = setup_repo();
         let recipients = network_rule_recipients(&paths, None).unwrap();
-        assert!(recipients.contains("ssh-ed25519 AAAABASE root@genesis"));
+        assert!(recipients.contains("PUBLIC_KEY_GENESIS"));
         let key = autodetect_sops_key_file(&paths, None).unwrap();
         assert!(key.ends_with("ssh_host_ed25519_key"));
     }
@@ -384,11 +384,11 @@ identity_file = "~/.ssh/homelab_deploy"
         .unwrap();
         fs::write(
             paths.host_keys_dir("alpha").join("ssh_host_ed25519_key.pub"),
-            "ssh-ed25519 AAAAALPHA root@alpha\n",
+            "PUBLIC_KEY_ALPHA\n",
         )
         .unwrap();
 
-        update_sops_yaml_add(&paths, "alpha", "ssh-ed25519 AAAAALPHA root@alpha").unwrap();
+        update_sops_yaml_add(&paths, "alpha", "PUBLIC_KEY_ALPHA").unwrap();
 
         let key = autodetect_sops_key_file(&paths, Some("alpha")).unwrap();
         assert!(key.ends_with("genesis/ssh_host_ed25519_key"));

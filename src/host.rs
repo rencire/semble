@@ -532,16 +532,16 @@ dns_suffix = "baiji-carat.ts.net"
 [[ssh.aliases]]
 name_suffix = "admin"
 user = "admin"
-identity_file = "~/.ssh/homelab_admin"
+identity_file = "~/.ssh/admin_key"
 
 [[ssh.aliases]]
 name_suffix = "deploy"
 user = "deploy"
-identity_file = "~/.ssh/homelab_deploy"
+identity_file = "~/.ssh/deploy_key"
 "#;
 
     const SOPS_BASE: &str = r#"keys:
-  - &genesis "ssh-ed25519 AAAABASE root@genesis"
+  - &genesis "PUBLIC_KEY_GENESIS"
 creation_rules:
   - path_regex: secrets/network\.(yaml|json|env|ini)$
     key_groups:
@@ -577,7 +577,7 @@ creation_rules:
         fs::create_dir_all(paths.host_keys_dir(hostname)).unwrap();
         fs::write(
             paths.sops_config_file(),
-            format!("{SOPS_BASE}  - &{hostname} \"ssh-ed25519 AAAAATLAS root@{hostname}\"\n"),
+            format!("{SOPS_BASE}  - &{hostname} \"PUBLIC_KEY_{}\"\n", hostname.to_uppercase()),
         )
         .unwrap();
 

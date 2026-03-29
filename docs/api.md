@@ -204,7 +204,7 @@ Example custom SSH alias override:
     {
       name = "genesis";
       user = "root";
-      identityFile = "~/.ssh/homelab_installer";
+      identityFile = "~/.ssh/installer_key";
     }
   ];
 }
