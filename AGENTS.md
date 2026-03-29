@@ -8,3 +8,7 @@ This file tracks significant changes, architectural decisions, and "lessons lear
 - Keep the subject line imperative and concise (for example: `feat(hostctl): add ssh alias subcommands`).
 - Prefer one logical change per commit; avoid bundling unrelated edits.
 - See development workflow notes: [docs/development.md](docs/development.md)
+
+## General Guidelines
+- Make the change easy, then make the easy change.
+- Prefer locality of changes over ambient design improvements done ewithout user confirmation.
