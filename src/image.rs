@@ -54,6 +54,14 @@ struct PreparedImageConfig {
 }
 
 fn resolve_prepare_config(paths: &RepoPaths, args: PrepareImageArgs) -> Result<PreparedImageConfig> {
+    resolve_prepare_config_with(paths, args, |paths, image_name| load_image_prepare_config(paths, image_name))
+}
+
+fn resolve_prepare_config_with(
+    paths: &RepoPaths,
+    args: PrepareImageArgs,
+    load_prepare_config: impl FnOnce(&RepoPaths, &str) -> Result<crate::repo::ImagePrepareConfig>,
+) -> Result<PreparedImageConfig> {
     let image_name = args.image_name;
     let build_attr = format!("images.{image_name}");
     let output_path = args
@@ -72,7 +80,7 @@ fn resolve_prepare_config(paths: &RepoPaths, args: PrepareImageArgs) -> Result<P
     let partition_label = if args.skip_inject {
         String::new()
     } else {
-        load_image_prepare_config(paths, &image_name)?.partition_label
+        load_prepare_config(paths, &image_name)?.partition_label
     };
 
     Ok(PreparedImageConfig {
@@ -409,9 +417,10 @@ impl Drop for LoopCleanup {
 
 #[cfg(test)]
 mod tests {
-    use super::{find_built_artifact, resolve_prepare_config, validate_prepare_inputs};
+    use super::{find_built_artifact, resolve_prepare_config, resolve_prepare_config_with, validate_prepare_inputs};
     use crate::cli::PrepareImageArgs;
-    use crate::repo::RepoPaths;
+    use crate::repo::{ImagePrepareConfig, RepoPaths};
+    use anyhow::anyhow;
     use std::fs;
     use tempfile::tempdir;
 
@@ -437,28 +446,17 @@ identity_file = "~/.ssh/id_ed25519"
 "#,
         )
         .unwrap();
-        fs::write(
-            root.join("flake.nix"),
-            r#"
-{
-  outputs = { self }: {
-    _semble.images.vishnu.prepare.partitionLabel = "NIXOS_SD";
-    _semble.images.genesis.prepare.partitionLabel = "nixos";
-  };
-}
-"#,
-        )
-        .unwrap();
     }
 
     #[test]
     fn resolve_prepare_config_uses_repo_defaults() {
+        // Verify the default build attr, partition label, keys dir, and output path.
         let tempdir = tempdir().unwrap();
         write_config(tempdir.path());
         fs::create_dir_all(tempdir.path().join("ssh_host_keys").join("vishnu")).unwrap();
 
         let paths = RepoPaths::new(tempdir.path()).unwrap();
-        let config = resolve_prepare_config(
+        let config = resolve_prepare_config_with(
             &paths,
             PrepareImageArgs {
                 image_name: "vishnu".into(),
@@ -466,6 +464,12 @@ identity_file = "~/.ssh/id_ed25519"
                 output: None,
                 device: None,
                 skip_inject: false,
+            },
+            |_paths, image_name| {
+                assert_eq!(image_name, "vishnu");
+                Ok(ImagePrepareConfig {
+                    partition_label: "NIXOS_SD".into(),
+                })
             },
         )
         .unwrap();
@@ -481,12 +485,13 @@ identity_file = "~/.ssh/id_ed25519"
 
     #[test]
     fn resolve_prepare_config_reads_prepare_metadata_for_multiple_images() {
+        // Verify prepare resolution uses the requested image name, not a hardcoded one.
         let tempdir = tempdir().unwrap();
         write_config(tempdir.path());
         fs::create_dir_all(tempdir.path().join("ssh_host_keys").join("genesis")).unwrap();
 
         let paths = RepoPaths::new(tempdir.path()).unwrap();
-        let config = resolve_prepare_config(
+        let config = resolve_prepare_config_with(
             &paths,
             PrepareImageArgs {
                 image_name: "genesis".into(),
@@ -494,6 +499,12 @@ identity_file = "~/.ssh/id_ed25519"
                 output: None,
                 device: None,
                 skip_inject: false,
+            },
+            |_paths, image_name| {
+                assert_eq!(image_name, "genesis");
+                Ok(ImagePrepareConfig {
+                    partition_label: "nixos".into(),
+                })
             },
         )
         .unwrap();
@@ -504,6 +515,7 @@ identity_file = "~/.ssh/id_ed25519"
 
     #[test]
     fn resolve_prepare_config_allows_skip_inject_without_image_prepare_config() {
+        // Verify skip-inject bypasses prepare metadata and keys-dir requirements.
         let tempdir = tempdir().unwrap();
         write_config(tempdir.path());
 
@@ -526,11 +538,12 @@ identity_file = "~/.ssh/id_ed25519"
 
     #[test]
     fn validate_prepare_inputs_rejects_missing_keys_dir() {
+        // Verify injection mode fails fast when the default keys dir does not exist.
         let tempdir = tempdir().unwrap();
         write_config(tempdir.path());
 
         let paths = RepoPaths::new(tempdir.path()).unwrap();
-        let config = resolve_prepare_config(
+        let config = resolve_prepare_config_with(
             &paths,
             PrepareImageArgs {
                 image_name: "vishnu".into(),
@@ -538,6 +551,11 @@ identity_file = "~/.ssh/id_ed25519"
                 output: None,
                 device: None,
                 skip_inject: false,
+            },
+            |_paths, _image_name| {
+                Ok(ImagePrepareConfig {
+                    partition_label: "NIXOS_SD".into(),
+                })
             },
         )
         .unwrap();
@@ -547,7 +565,31 @@ identity_file = "~/.ssh/id_ed25519"
     }
 
     #[test]
+    fn resolve_prepare_config_propagates_prepare_lookup_failures() {
+        // Verify prepare metadata lookup failures are surfaced to the caller.
+        let tempdir = tempdir().unwrap();
+        write_config(tempdir.path());
+
+        let paths = RepoPaths::new(tempdir.path()).unwrap();
+        let error = resolve_prepare_config_with(
+            &paths,
+            PrepareImageArgs {
+                image_name: "vishnu".into(),
+                keys_dir: None,
+                output: None,
+                device: None,
+                skip_inject: false,
+            },
+            |_paths, _image_name| Err(anyhow!("metadata lookup failed")),
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("metadata lookup failed"));
+    }
+
+    #[test]
     fn find_built_artifact_prefers_compressed_img() {
+        // Verify artifact discovery prefers compressed images over plain img/raw files.
         let tempdir = tempdir().unwrap();
         let result_dir = tempdir.path().join("result").join("nested");
         fs::create_dir_all(&result_dir).unwrap();

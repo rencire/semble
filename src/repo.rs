@@ -3,7 +3,7 @@ use anyhow::Context;
 use anyhow::Result;
 use std::env;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output};
 
 #[derive(Debug, Clone)]
 pub struct RepoPaths {
@@ -99,6 +99,14 @@ pub fn load_image_prepare_config(paths: &RepoPaths, image_name: &str) -> Result<
 }
 
 fn load_image_prepare_config_from_nix(paths: &RepoPaths, image_name: &str) -> Result<Option<ImagePrepareConfig>> {
+    load_image_prepare_config_with(paths, image_name, run_nix_eval)
+}
+
+fn load_image_prepare_config_with(
+    paths: &RepoPaths,
+    image_name: &str,
+    eval: impl FnOnce(&RepoPaths, &str) -> Result<Option<Vec<u8>>>,
+) -> Result<Option<ImagePrepareConfig>> {
     #[derive(Debug, serde::Deserialize)]
     struct FlakePrepare {
         #[serde(rename = "partitionLabel")]
@@ -110,6 +118,21 @@ fn load_image_prepare_config_from_nix(paths: &RepoPaths, image_name: &str) -> Re
         prepare: Option<FlakePrepare>,
     }
 
+    let Some(stdout) = eval(paths, image_name)? else {
+        return Ok(None);
+    };
+
+    let metadata: Option<FlakeImageMetadata> =
+        serde_json::from_slice(&stdout).context("failed to parse image metadata from `nix eval`")?;
+
+    Ok(metadata.and_then(|metadata| {
+        metadata.prepare.and_then(|prepare| {
+            prepare.partition_label.map(|partition_label| ImagePrepareConfig { partition_label })
+        })
+    }))
+}
+
+fn run_nix_eval(paths: &RepoPaths, image_name: &str) -> Result<Option<Vec<u8>>> {
     let canonical_root = paths
         .root()
         .canonicalize()
@@ -120,7 +143,15 @@ fn load_image_prepare_config_from_nix(paths: &RepoPaths, image_name: &str) -> Re
         image_name
     );
     let output = Command::new("nix")
-        .args(["eval", "--impure", "--json", "--expr", &expr])
+        .args([
+            "eval",
+            "--extra-experimental-features",
+            "nix-command flakes",
+            "--impure",
+            "--json",
+            "--expr",
+            &expr,
+        ])
         .current_dir(paths.root())
         .output();
 
@@ -130,6 +161,10 @@ fn load_image_prepare_config_from_nix(paths: &RepoPaths, image_name: &str) -> Re
         Err(err) => return Err(err).context("failed to run `nix eval` for image metadata"),
     };
 
+    parse_nix_eval_output(output)
+}
+
+fn parse_nix_eval_output(output: Output) -> Result<Option<Vec<u8>>> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stderr = stderr.trim();
@@ -141,14 +176,7 @@ fn load_image_prepare_config_from_nix(paths: &RepoPaths, image_name: &str) -> Re
         return Err(anyhow::anyhow!(detail)).context("failed to evaluate image metadata with `nix eval`");
     }
 
-    let metadata: Option<FlakeImageMetadata> =
-        serde_json::from_slice(&output.stdout).context("failed to parse image metadata from `nix eval`")?;
-
-    Ok(metadata.and_then(|metadata| {
-        metadata.prepare.and_then(|prepare| {
-            prepare.partition_label.map(|partition_label| ImagePrepareConfig { partition_label })
-        })
-    }))
+    Ok(Some(output.stdout))
 }
 
 fn resolve_user_path(path: &Path, root: &Path) -> PathBuf {
@@ -168,9 +196,12 @@ fn resolve_user_path(path: &Path, root: &Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use super::{load_image_prepare_config, ImagePrepareConfig, RepoPaths};
+    use super::{load_image_prepare_config_with, parse_nix_eval_output, ImagePrepareConfig, RepoPaths};
+    use anyhow::anyhow;
     use std::fs;
+    use std::os::unix::process::ExitStatusExt;
     use std::path::Path;
+    use std::process::Output;
     use tempfile::tempdir;
 
     fn write_minimal_semble_toml(root: &Path) {
@@ -199,39 +230,60 @@ identity_file = "~/.ssh/id_ed25519"
 
     #[test]
     fn prefers_nix_image_metadata_when_available() {
+        // Verify JSON metadata from the eval layer maps into ImagePrepareConfig.
         let tempdir = tempdir().unwrap();
         write_minimal_semble_toml(tempdir.path());
-        fs::write(
-            tempdir.path().join("flake.nix"),
-            r#"
-{
-  outputs = { self }: {
-    _semble.images.vishnu.prepare.partitionLabel = "NIXOS_SD";
-  };
-}
-"#,
-        )
-        .unwrap();
-        fs::write(
-            tempdir.path().join("flake.nix"),
-            r#"
-{
-  outputs = { self }: {
-    _semble.images.vishnu.prepare.partitionLabel = "NIXOS_SD";
-  };
-}
-"#,
-        )
-        .unwrap();
-
         let paths = RepoPaths::new(tempdir.path()).unwrap();
-        let config = load_image_prepare_config(&paths, "vishnu").unwrap();
+        let config = load_image_prepare_config_with(&paths, "vishnu", |_paths, _image_name| {
+            Ok(Some(br#"{"prepare":{"partitionLabel":"NIXOS_SD"}}"#.to_vec()))
+        })
+        .unwrap();
 
         assert_eq!(
-            config,
+            config.unwrap(),
             ImagePrepareConfig {
                 partition_label: "NIXOS_SD".into()
             }
         );
+    }
+
+    #[test]
+    fn returns_none_when_metadata_is_missing() {
+        // Verify missing metadata stays distinguishable from a real eval failure.
+        let tempdir = tempdir().unwrap();
+        write_minimal_semble_toml(tempdir.path());
+
+        let paths = RepoPaths::new(tempdir.path()).unwrap();
+        let config = load_image_prepare_config_with(&paths, "vishnu", |_paths, _image_name| Ok(None)).unwrap();
+
+        assert_eq!(config, None);
+    }
+
+    #[test]
+    fn preserves_nix_eval_failures() {
+        // Verify eval errors propagate instead of being rewritten as missing metadata.
+        let tempdir = tempdir().unwrap();
+        write_minimal_semble_toml(tempdir.path());
+
+        let paths = RepoPaths::new(tempdir.path()).unwrap();
+        let error = load_image_prepare_config_with(&paths, "vishnu", |_paths, _image_name| {
+            Err(anyhow!("boom"))
+        })
+        .unwrap_err();
+
+        assert!(error.to_string().contains("boom"));
+    }
+
+    #[test]
+    fn parse_nix_eval_output_reports_stderr() {
+        // Verify non-zero nix eval exits preserve stderr for debugging.
+        let output = Output {
+            status: std::process::ExitStatus::from_raw(256),
+            stdout: Vec::new(),
+            stderr: b"permission denied".to_vec(),
+        };
+
+        let error = parse_nix_eval_output(output).unwrap_err();
+        assert!(format!("{error:#}").contains("permission denied"));
     }
 }
