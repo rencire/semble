@@ -131,7 +131,14 @@ fn load_image_prepare_config_from_nix(paths: &RepoPaths, image_name: &str) -> Re
     };
 
     if !output.status.success() {
-        return Ok(None);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr = stderr.trim();
+        let detail = if stderr.is_empty() {
+            format!("`nix eval` exited with status {}", output.status)
+        } else {
+            format!("`nix eval` exited with status {}: {stderr}", output.status)
+        };
+        return Err(anyhow::anyhow!(detail)).context("failed to evaluate image metadata with `nix eval`");
     }
 
     let metadata: Option<FlakeImageMetadata> =
