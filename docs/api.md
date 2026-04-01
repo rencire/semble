@@ -70,8 +70,10 @@ The consumer remains responsible for its own `devShells` used with
 `nix develop`.
 
 For v0.3, Semble standardizes `images/` as a first-class consumer convention in
-addition to host composition. It still does not require or standardize
-`packages`, `apps`, `checks`, `templates`, `overlays`, or `darwinConfigurations`.
+addition to host composition, and it adds an explicit `overlays` argument to
+`mkFlake` for host and image evaluation. It still does not require or
+standardize `packages`, `apps`, `checks`, `templates`, or
+`darwinConfigurations`.
 
 ## Minimal Consumer Flake Example
 
@@ -101,6 +103,34 @@ This is the minimal v1 entrypoint:
 - the consumer declares `inputs`
 - the consumer calls `inputs.semble.lib.mkFlake`
 - Semble returns `nixosConfigurations` and `images`
+
+## Project Overlays
+
+Consumers may pass project overlays directly to `mkFlake`:
+
+```nix
+{
+  outputs = inputs:
+    inputs.semble.lib.mkFlake {
+      inherit inputs;
+      root = ./.;
+      overlays = [
+        (import ./overlays/default.nix)
+      ];
+    };
+}
+```
+
+Semble applies these overlays to the `pkgs` instance used for:
+
+- `nixosConfigurations`
+- `images`
+
+This makes overlay-provided packages available in host and image modules via
+`pkgs`.
+
+Semble does not apply these overlays automatically to consumer-defined flake
+outputs such as `packages` or `devShells`; those remain consumer-owned.
 
 ## Extended Consumer Flake Example
 

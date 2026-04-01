@@ -6,7 +6,7 @@
 
 rustPlatform.buildRustPackage {
   pname = "semble";
-  version = "0.2.2";
+  version = "0.3.0";
 
   src = lib.cleanSource ../..;
   cargoLock = {

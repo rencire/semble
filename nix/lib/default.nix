@@ -459,6 +459,14 @@ let
     else
       { };
 
+  overlayModule = overlays:
+    if overlays == [ ] then
+      { }
+    else
+      {
+        nixpkgs.overlays = overlays;
+      };
+
   overrideValues =
     priority: value:
     if builtins.isAttrs value then
@@ -710,6 +718,7 @@ let
     {
       project,
       key,
+      overlays ? [ ],
     }:
     let
       image = requireByKey project.root "image" key project.imagesByKey;
@@ -800,7 +809,7 @@ let
             image = image;
           };
         } // extraSpecialArgs;
-        modules = resolvedHost.modules ++ imageModules;
+        modules = resolvedHost.modules ++ imageModules ++ [ (overlayModule overlays) ];
       };
     in
     {
@@ -821,6 +830,7 @@ let
     {
       inputs,
       root,
+      overlays ? [ ],
     }:
     let
       project = discoverProject { inherit inputs root; };
@@ -850,14 +860,14 @@ let
               inherit project resolved;
             };
           } // extraSpecialArgs;
-          modules = resolved.modules;
+          modules = resolved.modules ++ [ (overlayModule overlays) ];
         }
       ) project.hostsByKey;
 
       images = lib.mapAttrs (
         key: _:
         (resolveImage {
-          inherit project key;
+          inherit project key overlays;
         }).build
       ) project.imagesByKey;
 

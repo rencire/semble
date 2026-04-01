@@ -37,6 +37,10 @@ let
     };
   };
 
+  testOverlay = final: prev: {
+    overlay-marker = prev.writeShellScriptBin "overlay-marker" "";
+  };
+
   project = sembleLib.discoverProject {
     inputs = testInputs;
     root = successRoot;
@@ -57,7 +61,14 @@ let
     root = successRoot;
   };
 
+  flakeWithOverlay = sembleLib.mkFlake {
+    inputs = testInputs;
+    root = successRoot;
+    overlays = [ testOverlay ];
+  };
+
   hostConfig = flake.nixosConfigurations.atlas.config;
+  hostConfigWithOverlay = flakeWithOverlay.nixosConfigurations.atlas.config;
   beaconConfig = flake.nixosConfigurations.beacon.config;
   cedarConfig = flake.nixosConfigurations.cedar.config;
   installerImage = flake.images.installer;
@@ -101,6 +112,11 @@ in
   upstreamInputsApply = assert (hostConfig.environment.variables.FAKE_INPUT == "enabled"); true;
   presetInputModulesApply = assert (hostConfig.environment.variables.FAKE_BUNDLE == "enabled"); true;
   hostInputModulesApply = assert (hostConfig.environment.variables.FAKE_DIRECT == "enabled"); true;
+  overlayPackagesApplyToHosts = assert (
+    builtins.any
+      (pkg: (pkg.pname or pkg.name or "") == "overlay-marker")
+      hostConfigWithOverlay.environment.systemPackages
+  ); true;
   customHostBuilderApplies = assert (cedarConfig.environment.variables.FAKE_SYSTEM_BUILDER == "nixosSystemFull"); true;
   imageInlineConfigurationApplies = assert (installerConfig.environment.variables.IMAGE_INLINE == "enabled"); true;
   imageConfigFileApplies = assert (installerConfig.environment.variables.IMAGE_FILE == "enabled"); true;

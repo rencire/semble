@@ -13,6 +13,7 @@ Current ADRs:
 
 - [ADR-0001: Add host `modules` and `inputModules` composition layers](./adr/0001-host-modules-and-inputmodules-composition-layers.md)
 - [ADR-0002: Adopt v0.2.0 composition layering and duplicate rules](./adr/0002-v0.2.0-composition-layering-and-duplicate-rules.md)
+- [ADR-0003: Add v0.3.0 project overlays to `mkFlake`](./adr/0003-v0.3.0-project-overlays.md)
 
 Notes:
 
