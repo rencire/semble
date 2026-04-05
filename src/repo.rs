@@ -1,4 +1,4 @@
-use crate::config::{SembleConfig, SshAliasConfig};
+use crate::config::{BuilderPolicyConfig, SembleConfig, SshAliasConfig};
 use anyhow::Context;
 use anyhow::Result;
 use std::env;
@@ -75,6 +75,13 @@ impl RepoPaths {
             .collect()
     }
 
+    pub fn builder_policy(&self, name: &str) -> Option<&BuilderPolicyConfig> {
+        self.config
+            .builder_policies
+            .iter()
+            .find(|policy| policy.name == name)
+    }
+
     fn resolve_ssh_alias(&self, hostname: &str, alias: &SshAliasConfig) -> ResolvedSshAlias {
         ResolvedSshAlias {
             host_alias: format!("{hostname}-{}", alias.name_suffix),
@@ -90,7 +97,10 @@ pub struct ImagePrepareConfig {
     pub partition_label: String,
 }
 
-pub fn load_image_prepare_config(paths: &RepoPaths, image_name: &str) -> Result<ImagePrepareConfig> {
+pub fn load_image_prepare_config(
+    paths: &RepoPaths,
+    image_name: &str,
+) -> Result<ImagePrepareConfig> {
     load_image_prepare_config_from_nix(paths, image_name)?.ok_or_else(|| {
         anyhow::anyhow!(
             "missing image prepare metadata for `{image_name}`; expected `prepare.partitionLabel` in the image definition"
@@ -98,7 +108,10 @@ pub fn load_image_prepare_config(paths: &RepoPaths, image_name: &str) -> Result<
     })
 }
 
-fn load_image_prepare_config_from_nix(paths: &RepoPaths, image_name: &str) -> Result<Option<ImagePrepareConfig>> {
+fn load_image_prepare_config_from_nix(
+    paths: &RepoPaths,
+    image_name: &str,
+) -> Result<Option<ImagePrepareConfig>> {
     load_image_prepare_config_with(paths, image_name, run_nix_eval)
 }
 
@@ -122,12 +135,14 @@ fn load_image_prepare_config_with(
         return Ok(None);
     };
 
-    let metadata: Option<FlakeImageMetadata> =
-        serde_json::from_slice(&stdout).context("failed to parse image metadata from `nix eval`")?;
+    let metadata: Option<FlakeImageMetadata> = serde_json::from_slice(&stdout)
+        .context("failed to parse image metadata from `nix eval`")?;
 
     Ok(metadata.and_then(|metadata| {
         metadata.prepare.and_then(|prepare| {
-            prepare.partition_label.map(|partition_label| ImagePrepareConfig { partition_label })
+            prepare
+                .partition_label
+                .map(|partition_label| ImagePrepareConfig { partition_label })
         })
     }))
 }
@@ -173,7 +188,8 @@ fn parse_nix_eval_output(output: Output) -> Result<Option<Vec<u8>>> {
         } else {
             format!("`nix eval` exited with status {}: {stderr}", output.status)
         };
-        return Err(anyhow::anyhow!(detail)).context("failed to evaluate image metadata with `nix eval`");
+        return Err(anyhow::anyhow!(detail))
+            .context("failed to evaluate image metadata with `nix eval`");
     }
 
     Ok(Some(output.stdout))
@@ -196,7 +212,9 @@ fn resolve_user_path(path: &Path, root: &Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use super::{load_image_prepare_config_with, parse_nix_eval_output, ImagePrepareConfig, RepoPaths};
+    use super::{
+        load_image_prepare_config_with, parse_nix_eval_output, ImagePrepareConfig, RepoPaths,
+    };
     use anyhow::anyhow;
     use std::fs;
     use std::os::unix::process::ExitStatusExt;
@@ -235,7 +253,9 @@ identity_file = "~/.ssh/id_ed25519"
         write_minimal_semble_toml(tempdir.path());
         let paths = RepoPaths::new(tempdir.path()).unwrap();
         let config = load_image_prepare_config_with(&paths, "vishnu", |_paths, _image_name| {
-            Ok(Some(br#"{"prepare":{"partitionLabel":"NIXOS_SD"}}"#.to_vec()))
+            Ok(Some(
+                br#"{"prepare":{"partitionLabel":"NIXOS_SD"}}"#.to_vec(),
+            ))
         })
         .unwrap();
 
@@ -254,7 +274,9 @@ identity_file = "~/.ssh/id_ed25519"
         write_minimal_semble_toml(tempdir.path());
 
         let paths = RepoPaths::new(tempdir.path()).unwrap();
-        let config = load_image_prepare_config_with(&paths, "vishnu", |_paths, _image_name| Ok(None)).unwrap();
+        let config =
+            load_image_prepare_config_with(&paths, "vishnu", |_paths, _image_name| Ok(None))
+                .unwrap();
 
         assert_eq!(config, None);
     }
@@ -285,5 +307,44 @@ identity_file = "~/.ssh/id_ed25519"
 
         let error = parse_nix_eval_output(output).unwrap_err();
         assert!(format!("{error:#}").contains("permission denied"));
+    }
+
+    #[test]
+    fn resolves_builder_policy_by_name() {
+        let tempdir = tempdir().unwrap();
+        fs::write(
+            tempdir.path().join("semble.toml"),
+            r#"
+[paths]
+hosts_dir = "hosts"
+host_template_dir = "hosts/_template"
+ssh_host_keys_dir = "ssh_host_keys"
+sops_config_file = ".sops.yaml"
+network_secrets_file = "secrets/network.yaml"
+
+[ssh]
+managed_config_file = "~/.ssh/semble_hosts"
+dns_suffix = "example.ts.net"
+
+[[ssh.aliases]]
+name_suffix = "admin"
+user = "admin"
+identity_file = "~/.ssh/id_ed25519"
+
+[[builder_policies]]
+name = "l380y"
+host = "l380y-deploy"
+system = "x86_64-linux"
+max_jobs = 6
+speed_factor = 1
+supported_features = ["benchmark", "big-parallel"]
+"#,
+        )
+        .unwrap();
+
+        let paths = RepoPaths::new(tempdir.path()).unwrap();
+        let policy = paths.builder_policy("l380y").unwrap();
+        assert_eq!(policy.host, "l380y-deploy");
+        assert_eq!(policy.system, "x86_64-linux");
     }
 }

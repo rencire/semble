@@ -22,6 +22,8 @@ semble host delete atlas --yes
 semble ssh setup
 # build and switch a host configuration, prompting before activation
 semble host switch atlas --target-host atlas-deploy --ask
+# build and switch using a named strict builder policy from semble.toml
+semble host switch atlas --target-host atlas-deploy --builder-policy l380y
 # install or reinstall NixOS on a remote target host
 semble host provision atlas --target-host atlas-deploy
 ```
@@ -40,6 +42,8 @@ Remote target note:
 - `atlas-deploy` in the examples is an SSH host alias
 - a normal SSH target such as `deploy@atlas.example.com` or `deploy@192.168.0.40`
   also works
+- `--builder-policy <name>` selects a strict single-machine build policy from
+  `semble.toml` for that invocation
 - example:
 
 ```bash

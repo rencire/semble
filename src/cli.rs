@@ -79,6 +79,8 @@ pub enum SshCommand {
 #[derive(Debug, Args)]
 pub struct DelegatedHostArgs {
     pub hostname: String,
+    #[arg(long)]
+    pub builder_policy: Option<String>,
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub extra_args: Vec<OsString>,
 }
@@ -137,6 +139,15 @@ mod tests {
         let cases = [
             vec!["semble", "host", "build", "atlas", "--ask"],
             vec!["semble", "host", "switch", "atlas", "--dry-run"],
+            vec![
+                "semble",
+                "host",
+                "switch",
+                "atlas",
+                "--builder-policy",
+                "l380y",
+                "--dry-run",
+            ],
             vec![
                 "semble",
                 "host",

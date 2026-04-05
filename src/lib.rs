@@ -17,9 +17,18 @@ use cli::{Cli, Command, HostCommand, ImageCommand};
 pub fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Command::Host(host) => match host.command {
-            HostCommand::Build(args) => delegate::run_host_build(args),
-            HostCommand::Switch(args) => delegate::run_host_switch(args),
-            HostCommand::Provision(args) => delegate::run_host_provision(args),
+            HostCommand::Build(args) => {
+                let paths = repo::RepoPaths::new(std::env::current_dir()?)?;
+                delegate::run_host_build(&paths, args)
+            }
+            HostCommand::Switch(args) => {
+                let paths = repo::RepoPaths::new(std::env::current_dir()?)?;
+                delegate::run_host_switch(&paths, args)
+            }
+            HostCommand::Provision(args) => {
+                let paths = repo::RepoPaths::new(std::env::current_dir()?)?;
+                delegate::run_host_provision(&paths, args)
+            }
             HostCommand::Create(args) => {
                 let paths = repo::RepoPaths::new(std::env::current_dir()?)?;
                 host::validate_hostname(&args.hostname)?;
