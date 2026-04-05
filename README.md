@@ -36,6 +36,9 @@ Command behavior summary:
 Remote target note:
 - `host switch` does not currently infer a remote deploy alias on its own
 - for remote NixOS deployment, pass `--target-host` explicitly
+- when `--target-host` is present, Semble now injects
+  `--elevation-strategy passwordless` unless you already set an explicit
+  elevation strategy
 - `atlas-deploy` in the examples is an SSH host alias
 - a normal SSH target such as `deploy@atlas.example.com` or `deploy@192.168.0.40`
   also works

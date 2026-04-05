@@ -72,6 +72,29 @@ fn normalize_builder_policy(args: DelegatedHostArgs) -> Result<DelegatedHostArgs
     })
 }
 
+pub(crate) fn normalize_switch_args(args: DelegatedHostArgs) -> DelegatedHostArgs {
+    let has_target_host = args.extra_args.iter().any(|arg| arg == "--target-host");
+    let has_elevation_strategy = args
+        .extra_args
+        .iter()
+        .any(|arg| arg == "--elevation-strategy");
+
+    if !has_target_host || has_elevation_strategy {
+        return args;
+    }
+
+    let mut extra_args = Vec::with_capacity(args.extra_args.len() + 2);
+    extra_args.push(OsString::from("--elevation-strategy"));
+    extra_args.push(OsString::from("passwordless"));
+    extra_args.extend(args.extra_args);
+
+    DelegatedHostArgs {
+        hostname: args.hostname,
+        builder_policy: args.builder_policy,
+        extra_args,
+    }
+}
+
 fn serialize_builder_policy(policy: &BuilderPolicyConfig) -> String {
     let ssh_key = policy.ssh_key.as_deref().unwrap_or("-");
     let features = if policy.supported_features.is_empty() {
@@ -136,6 +159,7 @@ pub fn run_host_build(paths: &RepoPaths, args: DelegatedHostArgs) -> Result<()> 
 
 pub fn run_host_switch(paths: &RepoPaths, args: DelegatedHostArgs) -> Result<()> {
     let args = normalize_builder_policy(args)?;
+    let args = normalize_switch_args(args);
     let builders_override = args
         .builder_policy
         .as_deref()
@@ -190,8 +214,8 @@ pub fn run_host_provision(paths: &RepoPaths, args: DelegatedHostArgs) -> Result<
 #[cfg(test)]
 mod tests {
     use super::{
-        build_host_args, merge_nix_config, normalize_builder_policy, provision_host_args,
-        serialize_builder_policy,
+        build_host_args, merge_nix_config, normalize_builder_policy, normalize_switch_args,
+        provision_host_args, serialize_builder_policy,
     };
     use crate::cli::DelegatedHostArgs;
     use crate::config::BuilderPolicyConfig;
@@ -229,6 +253,76 @@ mod tests {
         assert_eq!(
             strings(&build_host_args("switch", &args, None)),
             vec!["os", "switch", ".", "-H", "atlas", "--dry-run", "--ask"]
+        );
+    }
+
+    #[test]
+    fn injects_passwordless_elevation_for_remote_switches() {
+        let args = DelegatedHostArgs {
+            hostname: String::from("atlas"),
+            builder_policy: None,
+            extra_args: vec![
+                OsString::from("--target-host"),
+                OsString::from("atlas-deploy"),
+                OsString::from("--dry-run"),
+            ],
+        };
+
+        let normalized = normalize_switch_args(args);
+
+        assert_eq!(
+            strings(&normalized.extra_args),
+            vec![
+                "--elevation-strategy",
+                "passwordless",
+                "--target-host",
+                "atlas-deploy",
+                "--dry-run",
+            ]
+        );
+    }
+
+    #[test]
+    fn preserves_explicit_elevation_strategy_for_remote_switches() {
+        let args = DelegatedHostArgs {
+            hostname: String::from("atlas"),
+            builder_policy: None,
+            extra_args: vec![
+                OsString::from("--target-host"),
+                OsString::from("atlas-deploy"),
+                OsString::from("--elevation-strategy"),
+                OsString::from("ask"),
+                OsString::from("--dry-run"),
+            ],
+        };
+
+        let normalized = normalize_switch_args(args);
+
+        assert_eq!(
+            strings(&normalized.extra_args),
+            vec![
+                "--target-host",
+                "atlas-deploy",
+                "--elevation-strategy",
+                "ask",
+                "--dry-run",
+            ]
+        );
+    }
+
+    #[test]
+    fn leaves_local_switches_unchanged() {
+        let args = DelegatedHostArgs {
+            hostname: String::from("atlas"),
+            builder_policy: None,
+            extra_args: vec![OsString::from("--dry-run"), OsString::from("--ask")],
+        };
+
+        let normalized = normalize_switch_args(args);
+
+        assert_eq!(
+            strings(&normalized.extra_args),
+            vec!["--dry-run", "--ask"]
         );
     }
 
