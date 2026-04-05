@@ -117,6 +117,7 @@ Builder policy is execution-time orchestration metadata:
 - it affects how Semble invokes Nix
 - it does not become part of the built target system
 - it should be resolved before the delegated command starts
+- the intended abstraction is broader than a single host, but the current implementation only narrows to one host at a time
 
 That makes it closer to existing `semble.toml` concerns like repo paths and
 execution-time command metadata than to host-local NixOS configuration.

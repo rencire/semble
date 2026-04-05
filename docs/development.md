@@ -23,6 +23,16 @@ jj new
 jj describe -m "feat(scope): add follow-up"
 ```
 
+Before pushing, inspect the commit stack for accidental secrets or other
+sensitive data. At minimum, review the final diff and any new/changed files
+with `git diff`, `git show`, or `jj diff`, and double-check that nothing like
+private keys, tokens, passwords, or generated secret material slipped into the
+change.
+
+If the published work should advance `main`, remember that pushing the `jj`
+bookmark is not the same thing as moving the Git `main` branch. Reconcile the
+branch state separately before treating the change as fully published.
+
 ## Testing Notes
 
 - `load_image_prepare_config_from_nix()` shells out to `nix eval` to read image `prepare.partitionLabel` metadata from the repo flake.
