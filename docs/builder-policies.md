@@ -57,12 +57,13 @@ does not change the deployment target selected by flags such as `--target-host`.
 
 ```toml
 [[builder_policies]]
-name = "l380y"
-host = "l380y-deploy"
+name = "buildbox"
+host = "builder@buildbox.example.net"
 system = "x86_64-linux"
+ssh_key = "/etc/nix/ssh/buildbox_builder"
 max_jobs = 6
 speed_factor = 1
-supported_features = ["benchmark", "big-parallel"]
+supported_features = ["benchmark", "big-parallel", "kvm", "nixos-test"]
 ```
 
 ## First-Version Scope
@@ -90,16 +91,24 @@ Semble should not expose looser modes until there is a concrete need for them.
 - `name`: CLI-facing policy identifier used by `--builder-policy`
 - `host`: SSH destination Semble should use when serializing the builder
 - `system`: Nix platform this builder should advertise
+- `ssh_key`: optional private key path to serialize into the builder entry
 - `max_jobs`: serialized builder job count
 - `speed_factor`: serialized builder weighting hint
 - `supported_features`: serialized Nix builder features
 
 For the first version, `host` should already be a valid SSH destination string,
-such as a generated Semble alias like `l380y-deploy`.
+suitably usable by the actual Nix remote-builder SSH path.
 
-For the first version, Semble should assume the normal SSH-based Nix remote
-builder transport and should not expose per-policy transport or authentication
-fields.
+In practice, builder policies are more robust when `host` is a real
+`user@hostname` destination instead of a shell-only SSH alias, because Nix's
+remote-builder transport may not resolve aliases from the same config context
+as an interactive user shell.
+
+`ssh_key` is optional. When present, Semble serializes it into Nix's builder
+entry so the delegated command does not have to rely on ambient `ssh-agent`
+state. This is especially useful on macOS multi-user Nix setups where remote
+builder SSH runs under the daemon/build-user context rather than the
+interactive user shell.
 
 ## Why This Belongs In `semble.toml`
 
@@ -141,6 +150,18 @@ Semble should treat duplicate `builder_policies.name` values as invalid config.
 
 Semble should fail rather than silently falling back to local builds or other
 configured builders when a builder policy is selected.
+
+## Operational Notes
+
+Builder policies only solve builder selection. The remote builder account still
+needs:
+
+- an SSH-reachable account on the target machine
+- a non-interactive private key readable by the local Nix builder context
+- any required `trusted-users` or remote-build permissions on the target host
+
+For automated remote builds, a dedicated builder key without a passphrase is
+usually more reliable than reusing a human deploy key.
 
 ## Deferred Questions
 
