@@ -39,6 +39,8 @@ pub struct BuilderPolicyConfig {
     pub name: String,
     pub host: String,
     pub system: String,
+    #[serde(default)]
+    pub ssh_key: Option<String>,
     pub max_jobs: u32,
     pub speed_factor: u32,
     #[serde(default)]
