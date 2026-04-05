@@ -14,3 +14,8 @@ The first version should optimize for:
 
 It should not try to solve every advanced workflow immediately. A smaller,
 clearer model is more valuable than a larger, blurrier one.
+
+Candidate future extension:
+
+- command-scoped builder selection through `--builder-policy`; see
+  [docs/builder-policies.md](./builder-policies.md)
