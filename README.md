@@ -5,8 +5,7 @@
 It expects the target repo to define a root-level `semble.toml` that specifies:
 - repo paths such as `hosts/`, `ssh_host_keys/`, and `.sops.yaml`
 - the host template location
-- the SSH symlink path to refresh during `ssh setup`
-- SSH alias conventions such as DNS suffix, users, and identity files
+- command-time orchestration settings such as builder policies
 
 Image-specific prepare settings live in the image definition itself under
 `prepare.partitionLabel`, not in `semble.toml`.
@@ -18,8 +17,6 @@ Typical commands:
 semble host create atlas
 # remove a host scaffold and related generated material
 semble host delete atlas --yes
-# regenerate the managed SSH alias include file
-semble ssh setup
 # build and switch a host configuration, prompting before activation
 semble host switch atlas --target-host atlas-deploy --ask
 # build and switch using a named strict builder policy from semble.toml
@@ -44,6 +41,8 @@ Remote target note:
   also works
 - `--builder-policy <name>` selects a strict single-machine build policy from
   `semble.toml` for that invocation
+- machine-level SSH alias installation belongs to the repo's Nix configuration,
+  not to a Semble CLI setup command
 - example:
 
 ```bash

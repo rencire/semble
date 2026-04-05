@@ -295,20 +295,6 @@ host_template_dir = "hosts/host.template"
 ssh_host_keys_dir = "ssh_host_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"
-
-[ssh]
-managed_config_file = ".ssh/semble_hosts"
-dns_suffix = "baiji-carat.ts.net"
-
-[[ssh.aliases]]
-name_suffix = "admin"
-user = "admin"
-identity_file = "~/.ssh/admin_key"
-
-[[ssh.aliases]]
-name_suffix = "deploy"
-user = "deploy"
-identity_file = "~/.ssh/deploy_key"
 "#;
 
     fn setup_repo() -> (tempfile::TempDir, RepoPaths) {

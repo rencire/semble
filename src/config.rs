@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, Deserialize)]
 pub struct SembleConfig {
     pub paths: PathsConfig,
-    pub ssh: SshConfig,
     #[serde(default)]
     pub builder_policies: Vec<BuilderPolicyConfig>,
 }
@@ -18,20 +17,6 @@ pub struct PathsConfig {
     pub ssh_host_keys_dir: PathBuf,
     pub sops_config_file: PathBuf,
     pub network_secrets_file: PathBuf,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct SshConfig {
-    pub managed_config_file: PathBuf,
-    pub dns_suffix: String,
-    pub aliases: Vec<SshAliasConfig>,
-}
-
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-pub struct SshAliasConfig {
-    pub name_suffix: String,
-    pub user: String,
-    pub identity_file: String,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -71,7 +56,7 @@ mod tests {
         let tempdir = tempdir().unwrap();
         fs::write(
             tempdir.path().join("semble.toml"),
-            "[ssh]\ndns_suffix = \"example.ts.net\"\n",
+            "",
         )
         .unwrap();
 
@@ -89,15 +74,6 @@ host_template_dir = "hosts/_template"
 ssh_host_keys_dir = "ssh_host_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"
-
-[ssh]
-managed_config_file = "~/.ssh/semble_hosts"
-dns_suffix = "example.ts.net"
-
-[[ssh.aliases]]
-name_suffix = "admin"
-user = "admin"
-identity_file = "~/.ssh/id_ed25519"
 "#,
         )
         .unwrap();

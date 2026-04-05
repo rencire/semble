@@ -5,7 +5,6 @@ use crate::repo::RepoPaths;
 use crate::sops::{
     network_rule_aliases, reencrypt_network_yaml, update_sops_yaml_add, update_sops_yaml_delete,
 };
-use crate::ssh;
 use crate::template::{copy_host_template, ensure_facter_file};
 use anyhow::Result;
 use std::fmt::Write as _;
@@ -161,11 +160,6 @@ pub fn run_host_create(
     }
     let sops_key_path =
         reencrypt_network_yaml(paths, skip_reencrypt, sops_key_file, Some(hostname))?;
-    ssh::run_ssh_setup(paths).map_err(|error| {
-        anyhow::anyhow!(
-            "host was created but failed to refresh generated SSH aliases: {error}"
-        )
-    })?;
     print_create_summary(
         paths,
         &dst_dir,
@@ -296,10 +290,6 @@ pub fn run_host_delete(
                 "re-encrypt {} (unless --skip-reencrypt)",
                 relative_to_root(paths, &paths.network_secrets_file())
             ),
-            format!(
-                "refresh generated SSH aliases at {}",
-                relative_to_root(paths, &paths.ssh_managed_config_file())
-            ),
         ],
         assume_yes,
     )?;
@@ -318,11 +308,6 @@ pub fn run_host_delete(
         None
     };
     let (removed_host, removed_keys) = remove_host_files(paths, hostname)?;
-    ssh::run_ssh_setup(paths).map_err(|error| {
-        anyhow::anyhow!(
-            "host was deleted but failed to refresh generated SSH aliases: {error}"
-        )
-    })?;
     print_delete_summary(
         paths,
         hostname,
@@ -376,23 +361,24 @@ fn create_summary_text(
     );
     let _ = writeln!(
         output,
-        "Refreshed generated SSH aliases at {}",
-        relative_to_root(paths, &paths.ssh_managed_config_file()),
+        "{}",
+        if reencrypted {
+            format!(
+                "Updated SOPS recipients for: {}",
+                relative_to_root(paths, &paths.network_secrets_file())
+            )
+        } else {
+            format!(
+                "Skipped SOPS re-encryption for: {}",
+                relative_to_root(paths, &paths.network_secrets_file())
+            )
+        }
     );
     if reencrypted {
         let _ = writeln!(
             output,
-            "Updated SOPS recipients for: {}",
-            relative_to_root(paths, &paths.network_secrets_file())
-        );
-        if let Some(path) = sops_key_path {
-            let _ = writeln!(output, "Used SOPS update key: {}", path.display());
-        }
-    } else {
-        let _ = writeln!(
-            output,
-            "Skipped SOPS re-encryption for: {}",
-            relative_to_root(paths, &paths.network_secrets_file())
+            "Used SOPS update key: {}",
+            sops_key_path.unwrap().display()
         );
     }
     let _ = writeln!(output);
@@ -470,26 +456,27 @@ fn print_delete_summary(paths: &RepoPaths, hostname: &str, summary: DeleteSummar
         yes_no(summary.removed_keys)
     );
     println!(
-        "Refreshed generated SSH aliases at {}",
-        relative_to_root(paths, &paths.ssh_managed_config_file()),
-    );
-    if summary.sops_changed {
-        if summary.reencrypted {
-            println!(
-                "Updated SOPS recipients for: {}",
-                relative_to_root(paths, &paths.network_secrets_file())
-            );
-            if let Some(path) = summary.sops_key_path {
-                println!("Used SOPS update key: {}", path.display());
+        "{}",
+        if summary.sops_changed {
+            if summary.reencrypted {
+                format!(
+                    "Updated SOPS recipients for: {}",
+                    relative_to_root(paths, &paths.network_secrets_file())
+                )
+            } else {
+                format!(
+                    "Removed host from .sops.yaml but skipped re-encryption for: {}",
+                    relative_to_root(paths, &paths.network_secrets_file())
+                )
             }
         } else {
-            println!(
-                "Removed host from .sops.yaml but skipped re-encryption for: {}",
-                relative_to_root(paths, &paths.network_secrets_file())
-            );
+            format!("No .sops.yaml recipient changes were needed for: {hostname}")
         }
-    } else {
-        println!("No .sops.yaml recipient changes were needed for: {hostname}");
+    );
+    if summary.sops_changed && summary.reencrypted {
+        if let Some(path) = summary.sops_key_path {
+            println!("Used SOPS update key: {}", path.display());
+        }
     }
 }
 
@@ -524,20 +511,6 @@ host_template_dir = "hosts/_template"
 ssh_host_keys_dir = "ssh_host_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"
-
-[ssh]
-managed_config_file = ".ssh/semble_hosts"
-dns_suffix = "baiji-carat.ts.net"
-
-[[ssh.aliases]]
-name_suffix = "admin"
-user = "admin"
-identity_file = "~/.ssh/admin_key"
-
-[[ssh.aliases]]
-name_suffix = "deploy"
-user = "deploy"
-identity_file = "~/.ssh/deploy_key"
 "#;
 
     const SOPS_BASE: &str = r#"keys:
@@ -630,7 +603,7 @@ creation_rules:
 
         assert!(output.contains("Created host scaffold: hosts/atlas"));
         assert!(output.contains("Created SSH host keys: ssh_host_keys/atlas"));
-        assert!(output.contains("Refreshed generated SSH aliases at .ssh/semble_hosts"));
+        assert!(output.contains("Skipped SOPS re-encryption for: secrets/network.yaml"));
         assert!(
             output.contains("Next, review and adjust the host-specific settings in hosts/atlas/.")
         );

@@ -8,7 +8,6 @@ pub mod image;
 pub mod keys;
 pub mod repo;
 pub mod sops;
-pub mod ssh;
 pub mod template;
 
 use anyhow::Result;
@@ -77,12 +76,6 @@ pub fn run(cli: Cli) -> Result<()> {
                 }
             }
         },
-        Command::Ssh(args) => {
-            let paths = repo::RepoPaths::new(std::env::current_dir()?)?;
-            match args.command {
-                cli::SshCommand::Setup => ssh::run_ssh_setup(&paths),
-            }
-        }
         Command::Image(image) => match image.command {
             ImageCommand::Prepare(args) => {
                 let paths = repo::RepoPaths::new(std::env::current_dir()?)?;

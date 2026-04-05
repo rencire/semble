@@ -434,15 +434,6 @@ host_template_dir = "hosts/_template"
 ssh_host_keys_dir = "ssh_host_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"
-
-[ssh]
-managed_config_file = "~/.ssh/semble_hosts"
-dns_suffix = "example.ts.net"
-
-[[ssh.aliases]]
-name_suffix = "admin"
-user = "admin"
-identity_file = "~/.ssh/id_ed25519"
 "#,
         )
         .unwrap();

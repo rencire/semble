@@ -217,7 +217,7 @@ Supported host fields:
   `./configuration.nix`.
 - `configuration`: Optional inline host-local module content.
 - `ssh.aliases`: Optional list overriding generated SSH client aliases for this host.
-  - if omitted, consumers may apply repo-wide defaults such as aliases from `semble.toml`
+  - if omitted, consumers may apply repo-wide defaults from their Nix-owned SSH alias configuration
   - if set to `[]`, no SSH aliases are generated for the host
   - if set to a list, consumers should use that list exactly
 

@@ -11,7 +11,6 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     Host(HostArgs),
-    Ssh(SshArgs),
     Image(ImageArgs),
 }
 
@@ -63,17 +62,6 @@ pub struct KeysArgs {
 pub enum KeysCommand {
     Add(NamedHostArgs),
     Delete(DeleteHostArgs),
-}
-
-#[derive(Debug, Args)]
-pub struct SshArgs {
-    #[command(subcommand)]
-    pub command: SshCommand,
-}
-
-#[derive(Debug, Subcommand)]
-pub enum SshCommand {
-    Setup,
 }
 
 #[derive(Debug, Args)]
@@ -188,11 +176,5 @@ mod tests {
             let result = Cli::try_parse_from(args);
             assert!(result.is_ok(), "failed to parse image prepare command");
         }
-    }
-
-    #[test]
-    fn parses_ssh_setup_command() {
-        let result = Cli::try_parse_from(vec!["semble", "ssh", "setup"]);
-        assert!(result.is_ok(), "failed to parse ssh setup command");
     }
 }

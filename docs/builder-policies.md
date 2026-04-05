@@ -118,8 +118,8 @@ Builder policy is execution-time orchestration metadata:
 - it does not become part of the built target system
 - it should be resolved before the delegated command starts
 
-That makes it closer to existing `semble.toml` concerns like SSH alias
-conventions than to host-local NixOS configuration.
+That makes it closer to existing `semble.toml` concerns like repo paths and
+execution-time command metadata than to host-local NixOS configuration.
 
 ## Relationship To Host Nix Config
 
