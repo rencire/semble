@@ -14,17 +14,17 @@ Typical commands:
 
 ```bash
 # scaffold a new host directory and SSH host keys
-semble host create atlas
+semble host create my-host
 # remove a host scaffold and related generated material
-semble host delete atlas --yes
+semble host delete my-host --yes
 # build and switch a host configuration, prompting before activation
-semble host switch atlas --target-host atlas-deploy --ask
+semble host switch my-host --target-host my-host-deploy --ask
 # build and switch using a named strict builder policy from semble.toml
-semble host switch atlas --target-host atlas-deploy --builder-policy l380y
+semble host switch my-host --target-host my-host-deploy --builder-policy buildbox
 # install or reinstall NixOS on a remote target host
-semble host provision atlas --target-host atlas-deploy
-# provision a Thor-hosted MicroVM guest SSH host identity
-semble microvm provision-identity claw --parent thor
+semble host provision my-host --target-host my-host-deploy
+# provision a MicroVM guest SSH host identity through its parent host
+semble microvm provision-identity my-vm --parent my-host
 ```
 
 Command behavior summary:
@@ -50,8 +50,8 @@ Remote target note:
 - when `--target-host` is present, Semble now injects
   `--elevation-strategy passwordless` unless you already set an explicit
   elevation strategy
-- `atlas-deploy` in the examples is an SSH host alias
-- a normal SSH target such as `deploy@atlas.example.com` or `deploy@192.168.0.40`
+- `my-host-deploy` in the examples is an SSH host alias
+- a normal SSH target such as `deploy@my-host.example.com` or `deploy@192.168.0.40`
   also works
 - `--builder-policy <name>` selects a strict single-machine build policy from
   `semble.toml` for that invocation
@@ -60,5 +60,5 @@ Remote target note:
 - example:
 
 ```bash
-semble host switch atlas --target-host atlas-deploy --ask
+semble host switch my-host --target-host my-host-deploy --ask
 ```

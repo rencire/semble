@@ -38,7 +38,7 @@ Provide a small Semble-owned orchestration API that:
 ## Minimal CLI
 
 ```bash
-semble host switch thor --target-host thor-deploy --builder-policy l380y
+semble host switch my-host --target-host my-host-deploy --builder-policy buildbox
 ```
 
 The same flag should be accepted by:
