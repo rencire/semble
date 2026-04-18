@@ -1,6 +1,9 @@
 {
+  coreutils,
   lib,
+  makeWrapper,
   nix,
+  openssh,
   rustPlatform,
 }:
 
@@ -16,7 +19,18 @@ rustPlatform.buildRustPackage {
     };
   };
 
-  nativeBuildInputs = [ nix ];
+  nativeBuildInputs = [
+    makeWrapper
+    nix
+  ];
+
+  postInstall = ''
+    wrapProgram $out/bin/semble \
+      --prefix PATH : ${lib.makeBinPath [
+        coreutils
+        openssh
+      ]}
+  '';
 
   meta = {
     description = "Repo-aware host management CLI driven by semble.toml";

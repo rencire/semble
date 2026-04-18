@@ -6,12 +6,13 @@ pub mod error;
 pub mod host;
 pub mod image;
 pub mod keys;
+pub mod microvm;
 pub mod repo;
 pub mod sops;
 pub mod template;
 
 use anyhow::Result;
-use cli::{Cli, Command, HostCommand, ImageCommand};
+use cli::{Cli, Command, HostCommand, ImageCommand, MicrovmCommand};
 
 pub fn run(cli: Cli) -> Result<()> {
     match cli.command {
@@ -80,6 +81,12 @@ pub fn run(cli: Cli) -> Result<()> {
             ImageCommand::Prepare(args) => {
                 let paths = repo::RepoPaths::new(std::env::current_dir()?)?;
                 image::run_image_prepare(&paths, args)
+            }
+        },
+        Command::Microvm(microvm) => match microvm.command {
+            MicrovmCommand::ProvisionIdentity(args) => {
+                let paths = repo::RepoPaths::new(std::env::current_dir()?)?;
+                microvm::run_microvm_provision_identity(&paths, args)
             }
         },
     }

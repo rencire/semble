@@ -23,6 +23,8 @@ semble host switch atlas --target-host atlas-deploy --ask
 semble host switch atlas --target-host atlas-deploy --builder-policy l380y
 # install or reinstall NixOS on a remote target host
 semble host provision atlas --target-host atlas-deploy
+# provision a Thor-hosted MicroVM guest SSH host identity
+semble microvm provision-identity claw --parent thor
 ```
 
 Command behavior summary:
@@ -32,6 +34,15 @@ Command behavior summary:
   forwards to the equivalent of `tianyi os switch . -H <host> [extra args...]`
 - `semble host provision <host> [extra args...]`
   forwards to the equivalent of `tianyi provision . -H <host> [extra args...]`
+- `semble microvm provision-identity <host> --parent <parent>`
+  stages `ssh_host_keys/<host>/ssh_host_ed25519_key*` under
+  `/run/microvm-provisioning/<host>` on the parent host, restarts the MicroVM,
+  waits for the guest to acknowledge persistence, and removes the staged key
+  material from the parent
+  - by default the parent SSH target is `<parent>-admin`
+  - pass `--target-host` to override the SSH target
+  - pass `--replace` for migrations where an existing persistent guest key
+    should be replaced by the repo-managed key
 
 Remote target note:
 - `host switch` does not currently infer a remote deploy alias on its own

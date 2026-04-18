@@ -12,6 +12,7 @@ pub struct Cli {
 pub enum Command {
     Host(HostArgs),
     Image(ImageArgs),
+    Microvm(MicrovmArgs),
 }
 
 #[derive(Debug, Args)]
@@ -97,6 +98,32 @@ pub struct PrepareImageArgs {
     pub skip_inject: bool,
 }
 
+#[derive(Debug, Args)]
+pub struct MicrovmArgs {
+    #[command(subcommand)]
+    pub command: MicrovmCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum MicrovmCommand {
+    ProvisionIdentity(ProvisionIdentityArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct ProvisionIdentityArgs {
+    pub name: String,
+    #[arg(long)]
+    pub parent: String,
+    #[arg(long)]
+    pub target_host: Option<String>,
+    #[arg(long)]
+    pub host_keys_dir: Option<String>,
+    #[arg(long, default_value_t = 120)]
+    pub timeout: u64,
+    #[arg(long)]
+    pub replace: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::Cli;
@@ -175,6 +202,40 @@ mod tests {
         for args in cases {
             let result = Cli::try_parse_from(args);
             assert!(result.is_ok(), "failed to parse image prepare command");
+        }
+    }
+
+    #[test]
+    fn parses_microvm_commands() {
+        let cases = [
+            vec![
+                "semble",
+                "microvm",
+                "provision-identity",
+                "claw",
+                "--parent",
+                "thor",
+            ],
+            vec![
+                "semble",
+                "microvm",
+                "provision-identity",
+                "claw",
+                "--parent",
+                "thor",
+                "--target-host",
+                "thor-admin",
+                "--host-keys-dir",
+                "ssh_host_keys/claw",
+                "--timeout",
+                "60",
+                "--replace",
+            ],
+        ];
+
+        for args in cases {
+            let result = Cli::try_parse_from(args);
+            assert!(result.is_ok(), "failed to parse microvm command");
         }
     }
 }
