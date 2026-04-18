@@ -46,8 +46,28 @@ let
     root = successRoot;
   };
 
+  duplicateModuleProject = sembleLib.discoverProject {
+    inputs = testInputs;
+    root = duplicateModuleRoot;
+  };
+
+  duplicateInputOverlapProject = sembleLib.discoverProject {
+    inputs = testInputs;
+    root = duplicateInputOverlapRoot;
+  };
+
   resolved = sembleLib.resolveHost {
     inherit project;
+    key = "atlas";
+  };
+
+  resolvedDuplicateModule = sembleLib.resolveHost {
+    project = duplicateModuleProject;
+    key = "atlas";
+  };
+
+  resolvedDuplicateInputOverlap = sembleLib.resolveHost {
+    project = duplicateInputOverlapProject;
     key = "atlas";
   };
 
@@ -67,10 +87,16 @@ let
     overlays = [ testOverlay ];
   };
 
+  duplicateInputOverlapFlake = sembleLib.mkFlake {
+    inputs = testInputs;
+    root = duplicateInputOverlapRoot;
+  };
+
   hostConfig = flake.nixosConfigurations.atlas.config;
   hostConfigWithOverlay = flakeWithOverlay.nixosConfigurations.atlas.config;
   beaconConfig = flake.nixosConfigurations.beacon.config;
   cedarConfig = flake.nixosConfigurations.cedar.config;
+  duplicateInputOverlapConfig = duplicateInputOverlapFlake.nixosConfigurations.atlas.config;
   installerImage = flake.images.installer;
   installerConfig = resolvedImage.system.config;
 
@@ -123,8 +149,9 @@ in
   imageModulesApply = assert (installerConfig.environment.variables.EXTRA_MODULE == "enabled"); true;
   imageInputModulesApply = assert (installerConfig.environment.variables.FAKE_DIRECT == "enabled"); true;
   duplicatePresetFails = expectFailure duplicatePresetRoot;
-  duplicateModuleFails = expectFailure duplicateModuleRoot;
-  duplicateInputOverlapFails = expectFailure duplicateInputOverlapRoot;
+  duplicateModuleDedupes = assert (map (moduleDef: moduleDef.key) resolvedDuplicateModule.moduleDefs == [ "shared" ]); true;
+  duplicateInputOverlapDedupes = assert (map (selection: selection.key) resolvedDuplicateInputOverlap.explicitInputSelections == [ "fake.secrets" ]); true;
+  duplicateInputOverlapConfigApplies = assert (duplicateInputOverlapConfig.environment.variables.FAKE_INPUT == "enabled"); true;
   unknownPresetFails = expectFailure unknownPresetRoot;
   missingConfigFails = expectFailure missingConfigRoot;
   unknownImageHostFails = expectFailure unknownImageHostRoot;

@@ -98,9 +98,11 @@ evaluation and behavior.
 
 ### Strictness Over Magic
 
-Semble should prefer hard errors over silent ambiguity. Unknown keys, duplicate
-selections, and invalid references should fail early rather than being merged or
-deduplicated implicitly.
+Semble should prefer hard errors over silent ambiguity. Unknown keys, invalid
+references, duplicate ownership selections, and repeated values inside one
+selection list should fail early. Repeated `modules` and `inputModules` across
+composition sources are dependency declarations instead; Semble deduplicates
+them deterministically so presets can declare their own requirements directly.
 
 ## What Semble Is
 

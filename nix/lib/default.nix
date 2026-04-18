@@ -478,6 +478,7 @@ let
     {
       moduleDef,
       inputs,
+      inputRefs ? moduleDef.inputs,
     }:
     args@{ config, ... }:
     let
@@ -498,7 +499,7 @@ let
       imports = map (ref: resolveInputRef {
         inherit inputs ref;
         file = moduleDef.file;
-      }) moduleDef.inputs;
+      }) inputRefs;
       options = lib.setAttrByPath namespacePath optionsValue;
       config = configValue;
     };
@@ -517,12 +518,26 @@ let
       itemKey,
       origin,
       state,
+      allowDuplicate,
     }:
     if builtins.hasAttr itemKey state.seen then
       let
         first = builtins.getAttr itemKey state.seen;
       in
-      fileError file "duplicate ${label} `${itemKey}` via ${formatOrigin first.origin}; repeated from ${formatOrigin origin}"
+      if allowDuplicate then
+        state
+        // {
+          duplicates = state.duplicates ++ [
+            {
+              key = itemKey;
+              type = itemType;
+              firstOrigin = first.origin;
+              repeatedOrigin = origin;
+            }
+          ];
+        }
+      else
+        fileError file "duplicate ${label} `${itemKey}` via ${formatOrigin first.origin}; repeated from ${formatOrigin origin}"
     else
       {
         seen = state.seen // {
@@ -537,6 +552,7 @@ let
             inherit origin;
           }
         ];
+        duplicates = state.duplicates;
       };
 
   collectResolvedItems =
@@ -545,6 +561,7 @@ let
       label,
       itemType,
       selections,
+      allowDuplicates ? false,
     }:
     builtins.foldl' (
       state: selection:
@@ -552,8 +569,9 @@ let
         inherit file label itemType state;
         itemKey = selection.key;
         origin = selection.origin;
+        allowDuplicate = allowDuplicates;
       }
-    ) { seen = { }; ordered = [ ]; } selections;
+    ) { seen = { }; ordered = [ ]; duplicates = [ ]; } selections;
 
   collectPresetSelections =
     {
@@ -591,6 +609,7 @@ let
       field,
       label,
       itemType,
+      allowDuplicates ? false,
     }:
     let
       presetSelections = lib.concatMap (
@@ -611,29 +630,41 @@ let
     in
     collectResolvedItems {
       file = host.file;
-      inherit label itemType;
+      inherit label itemType allowDuplicates;
       selections = presetSelections ++ hostSelections;
     };
 
-  assertNoOverlapWithOrigins =
+  moduleInputPlan =
     {
-      file,
-      label,
-      explicitSelections,
-      transitiveSelections,
+      moduleDefs,
+      seenInputs ? { },
     }:
     let
-      explicitByKey = lib.listToAttrs (map (selection: lib.nameValuePair selection.key selection) explicitSelections);
-      overlaps = builtins.filter (selection: builtins.hasAttr selection.key explicitByKey) transitiveSelections;
-      _ = builtins.map (
-        overlap:
+      stepModule =
+        state: moduleDef:
         let
-          explicit = builtins.getAttr overlap.key explicitByKey;
+          stepInput =
+            inputState: ref:
+            if builtins.hasAttr ref inputState.seen then
+              inputState
+            else
+              {
+                seen = inputState.seen // { "${ref}" = true; };
+                refs = inputState.refs ++ [ ref ];
+              };
+          inputResult = builtins.foldl' stepInput { seen = state.seen; refs = [ ]; } moduleDef.inputs;
         in
-        fileError file "duplicate ${label} `${overlap.key}` via ${formatOrigin explicit.origin}; repeated from ${formatOrigin overlap.origin}"
-      ) overlaps;
+        {
+          seen = inputResult.seen;
+          planned = state.planned ++ [
+            {
+              inherit moduleDef;
+              inputRefs = inputResult.refs;
+            }
+          ];
+        };
     in
-    true;
+    (builtins.foldl' stepModule { seen = seenInputs; planned = [ ]; } moduleDefs).planned;
 
   resolveHost =
     {
@@ -652,6 +683,7 @@ let
         field = "modules";
         label = "module inclusion";
         itemType = "module";
+        allowDuplicates = true;
       };
       moduleDefs = map (selection: requireByKey host.file "module" selection.key project.modulesByKey) explicitModuleSelections.ordered;
       explicitInputSelections = collectExplicitSelections {
@@ -659,6 +691,7 @@ let
         field = "inputModules";
         label = "input module inclusion";
         itemType = "input module";
+        allowDuplicates = true;
       };
       transitiveInputSelections = lib.concatMap (
         moduleDef:
@@ -669,11 +702,11 @@ let
           })
           moduleDef.inputs
       ) moduleDefs;
-      _ = assertNoOverlapWithOrigins {
-        file = host.file;
-        label = "input module inclusion";
-        explicitSelections = explicitInputSelections.ordered;
-        inherit transitiveInputSelections;
+      modulePlans = moduleInputPlan {
+        inherit moduleDefs;
+        seenInputs = lib.listToAttrs (
+          map (selection: lib.nameValuePair selection.key true) explicitInputSelections.ordered
+        );
       };
       hostConfigFileModule =
         if builtins.pathExists host.configFile then
@@ -691,11 +724,11 @@ let
       transitiveInputSelections = transitiveInputSelections;
       modules =
         map
-          (moduleDef: makeSembleModule {
-            inherit moduleDef;
+          (modulePlan: makeSembleModule {
+            inherit (modulePlan) moduleDef inputRefs;
             inherit (project) inputs;
           })
-          moduleDefs
+          modulePlans
         ++ map (
           selection:
           resolveInputRef {
@@ -758,11 +791,11 @@ let
           })
           moduleDef.inputs
       ) imageModuleDefs;
-      _ = assertNoOverlapWithOrigins {
-        file = image.file;
-        label = "image input module inclusion";
-        explicitSelections = explicitImageInputSelections.ordered;
-        transitiveSelections = transitiveImageInputSelections;
+      imageModulePlans = moduleInputPlan {
+        moduleDefs = imageModuleDefs;
+        seenInputs = lib.listToAttrs (
+          map (selection: lib.nameValuePair selection.key true) explicitImageInputSelections.ordered
+        );
       };
       imageConfigFileModule =
         if builtins.pathExists image.configFile then
@@ -773,11 +806,11 @@ let
           { };
       imageModules =
         map
-          (moduleDef: makeSembleModule {
-            inherit moduleDef;
+          (modulePlan: makeSembleModule {
+            inherit (modulePlan) moduleDef inputRefs;
             inherit (project) inputs;
           })
-          imageModuleDefs
+          imageModulePlans
         ++ map (
           selection:
           resolveInputRef {

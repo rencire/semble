@@ -590,11 +590,13 @@ This is the intended progression:
 5. `inputs = [ "<input>.<module>" ]` resolves by convention as
    `inputs.<input>.nixosModules.<module>`.
 6. Unknown module, preset, profile, or input keys are hard errors.
-7. Duplicate inclusion is a hard error across `modules`, `inputModules`,
-   `presets`, `profiles`, and overlap between explicit `inputModules` and
-   module-transitive `inputs`.
-8. Duplicate errors include provenance so users can see which ownership path to
-   remove. Semble does not deduplicate repeated selections implicitly.
+7. Duplicate values inside a single selection list are hard errors.
+8. Duplicate inclusion remains a hard error for ownership layers such as
+   `presets` and `profiles`.
+9. Repeated `modules` and `inputModules` across composition sources are
+   dependency declarations. Semble deduplicates them by key using first-wins
+   ordering so each preset can declare its own requirements without implicitly
+   depending on another preset.
 
 ## Deferred Questions
 
