@@ -121,8 +121,6 @@ pub struct ProvisionArgs {
     #[arg(long)]
     pub install_ssh_host_keys: Option<String>,
     #[arg(long)]
-    pub mount_point: Option<String>,
-    #[arg(long)]
     pub system_store_path: Option<String>,
     #[arg(long)]
     pub no_encrypt: bool,
@@ -228,8 +226,6 @@ mod tests {
                 "secrets/luks_root_keys/claw.key",
                 "--install-ssh-host-keys",
                 "ssh_host_keys/claw",
-                "--mount-point",
-                "/mnt/claw-root",
                 "--system-store-path",
                 "/nix/store/test-system",
                 "--no-encrypt",

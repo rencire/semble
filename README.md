@@ -52,8 +52,6 @@ Command behavior summary:
     custom directory into the guest root
   - `--builder-policy <name>` builds the guest through a strict single-
     machine policy from `semble.toml`
-  - `--mount-point <path>` only when the default `/mnt/<guest>-root` does
-    not fit the parent-host layout
   - `--force-reformat` only when you intentionally want to overwrite an
     existing image
 

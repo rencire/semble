@@ -66,9 +66,7 @@ pub fn run_microvm_provision(paths: &RepoPaths, args: ProvisionArgs) -> Result<(
         }
     }
 
-    let mount_point = args
-        .mount_point
-        .unwrap_or_else(|| format!("/mnt/{}-root", args.guest));
+    let mount_point = format!("/mnt/{}-root", args.guest);
     let remote_key_path = format!("/tmp/{}-root.key", args.guest);
     let remote_ssh_host_key_path = format!("/tmp/{}-ssh_host_ed25519_key", args.guest);
     let remote_ssh_host_key_pub_path = format!("{remote_ssh_host_key_path}.pub");
