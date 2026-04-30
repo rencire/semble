@@ -1,6 +1,6 @@
 # Proposal: Migrate encrypted MicroVM root provisioning into Semble
 
-Status: `draft`
+Status: `accepted`
 
 ## Summary
 
@@ -61,6 +61,8 @@ The command should own the provisioning workflow end to end, including the
 steps needed to prepare the MicroVM's encrypted root provisioning path.
 It should also bring the guest online by handling the MicroVM host-side
 activation step after the image is installed.
+Encrypted provisioning should use a fixed mapper name convention (`cryptroot`)
+instead of exposing a mapper-name override.
 
 The current Semble `microvm provision-identity` command can inform the new
 implementation, but the user-facing command should be broader than identity
@@ -87,6 +89,8 @@ Why this shape:
 - It reflects that this workflow differs from physical-host provisioning:
   first the guest image is provisioned on the parent host, then the host-side
   Semble flow activates the MicroVM guest as part of the same command.
+- It avoids making the mapper name a public provisioning override and keeps the
+  encrypted-root convention consistent.
 
 Rejected shape:
 
@@ -134,3 +138,13 @@ image preparation.
 This proposal is intentionally broader than an ADR. It is about moving a
 workflow into Semble, not about changing Semble's long-lived architecture
 model.
+
+## Research Resources
+
+The following references are useful while researching the encrypted-root and
+remote-unlock aspects of the proposed MicroVM provisioning flow:
+
+- [Remote disk unlocking (NixOS Wiki)](https://wiki.nixos.org/wiki/Remote_disk_unlocking)
+- [Example `remote-unlock.nix` module](https://git.eisfunke.com/config/nixos/-/blob/main/nixos/remote-unlock.nix)
+- [Secrets and full disk encryption (`nixos-anywhere`)](https://nix-community.github.io/nixos-anywhere/howtos/secrets.html)
+- [Disk Encryption on NixOS servers: How & when to unlock? (NixOS Discourse)](https://discourse.nixos.org/t/disk-encryption-on-nixos-servers-how-when-to-unlock/5030)

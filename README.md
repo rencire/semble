@@ -23,8 +23,8 @@ semble host switch my-host --target-host my-host-deploy --ask
 semble host switch my-host --target-host my-host-deploy --builder-policy buildbox
 # install or reinstall NixOS on a remote target host
 semble host provision my-host --target-host my-host-deploy
-# provision a MicroVM guest SSH host identity through its parent host
-semble microvm provision-identity my-vm --parent my-host
+# provision a MicroVM guest image and bring it online through its parent host
+semble microvm provision my-vm --parent my-host --key-file ./secrets/my-vm-root.key
 ```
 
 Command behavior summary:
@@ -34,15 +34,28 @@ Command behavior summary:
   forwards to the equivalent of `tianyi os switch . -H <host> [extra args...]`
 - `semble host provision <host> [extra args...]`
   forwards to the equivalent of `tianyi provision . -H <host> [extra args...]`
-- `semble microvm provision-identity <host> --parent <parent>`
-  stages `ssh_host_keys/<host>/ssh_host_ed25519_key*` under
-  `/run/microvm-provisioning/<host>` on the parent host, restarts the MicroVM,
-  waits for the guest to acknowledge persistence, and removes the staged key
-  material from the parent
-  - by default the parent SSH target is `<parent>-admin`
-  - pass `--target-host` to override the SSH target
-  - pass `--replace` for migrations where an existing persistent guest key
-    should be replaced by the repo-managed key
+- `semble microvm provision <guest> --parent <parent>`
+  resolves the guest's `microvm.volumes` configuration, creates or formats the
+  root image on the parent host, copies the built system closure to the parent,
+  installs into the mounted root, optionally copies SSH host keys into
+  `/etc/ssh/`, validates the installed guest system, and restarts the MicroVM
+  on the parent host
+  - typical usage:
+  - `--parent <host>` is required
+  - `--key-file <path>` is required for encrypted provisioning
+  - encrypted provisioning uses the `cryptroot` mapper name by default
+  - non-typical overrides:
+  - `--system-store-path` skips the guest build step and uses an existing
+    Nix store path
+  - `--no-encrypt` creates a plain ext4 root image instead of a LUKS container
+  - `--install-ssh-host-keys <dir>` copies `ssh_host_ed25519_key*` from a
+    custom directory into the guest root
+  - `--builder-policy <name>` builds the guest through a strict single-
+    machine policy from `semble.toml`
+  - `--mount-point <path>` only when the default `/mnt/<guest>-root` does
+    not fit the parent-host layout
+  - `--force-reformat` only when you intentionally want to overwrite an
+    existing image
 
 Remote target note:
 - `host switch` does not currently infer a remote deploy alias on its own

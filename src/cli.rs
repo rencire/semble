@@ -106,22 +106,28 @@ pub struct MicrovmArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum MicrovmCommand {
-    ProvisionIdentity(ProvisionIdentityArgs),
+    Provision(ProvisionArgs),
 }
 
 #[derive(Debug, Args)]
-pub struct ProvisionIdentityArgs {
-    pub name: String,
+pub struct ProvisionArgs {
+    pub guest: String,
     #[arg(long)]
     pub parent: String,
     #[arg(long)]
-    pub target_host: Option<String>,
+    pub builder_policy: Option<String>,
     #[arg(long)]
-    pub host_keys_dir: Option<String>,
-    #[arg(long, default_value_t = 120)]
-    pub timeout: u64,
+    pub key_file: Option<String>,
     #[arg(long)]
-    pub replace: bool,
+    pub install_ssh_host_keys: Option<String>,
+    #[arg(long)]
+    pub mount_point: Option<String>,
+    #[arg(long)]
+    pub system_store_path: Option<String>,
+    #[arg(long)]
+    pub no_encrypt: bool,
+    #[arg(long)]
+    pub force_reformat: bool,
 }
 
 #[cfg(test)]
@@ -208,28 +214,26 @@ mod tests {
     #[test]
     fn parses_microvm_commands() {
         let cases = [
+            vec!["semble", "microvm", "provision", "claw", "--parent", "thor"],
             vec![
                 "semble",
                 "microvm",
-                "provision-identity",
+                "provision",
                 "claw",
                 "--parent",
                 "thor",
-            ],
-            vec![
-                "semble",
-                "microvm",
-                "provision-identity",
-                "claw",
-                "--parent",
+                "--builder-policy",
                 "thor",
-                "--target-host",
-                "thor-admin",
-                "--host-keys-dir",
+                "--key-file",
+                "secrets/luks_root_keys/claw.key",
+                "--install-ssh-host-keys",
                 "ssh_host_keys/claw",
-                "--timeout",
-                "60",
-                "--replace",
+                "--mount-point",
+                "/mnt/claw-root",
+                "--system-store-path",
+                "/nix/store/test-system",
+                "--no-encrypt",
+                "--force-reformat",
             ],
         ];
 

@@ -84,9 +84,9 @@ pub fn run(cli: Cli) -> Result<()> {
             }
         },
         Command::Microvm(microvm) => match microvm.command {
-            MicrovmCommand::ProvisionIdentity(args) => {
+            MicrovmCommand::Provision(args) => {
                 let paths = repo::RepoPaths::new(std::env::current_dir()?)?;
-                microvm::run_microvm_provision_identity(&paths, args)
+                microvm::run_microvm_provision(&paths, args)
             }
         },
     }

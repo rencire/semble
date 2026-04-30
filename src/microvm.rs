@@ -1,117 +1,447 @@
-use crate::cli::ProvisionIdentityArgs;
+use crate::cli::{DelegatedHostArgs, ProvisionArgs};
+use crate::delegate;
 use crate::error::fail;
 use crate::host::validate_hostname;
 use crate::repo::RepoPaths;
 use anyhow::{Context, Result};
-use std::fs::File;
+use serde::Deserialize;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::process::Command;
 
-pub fn run_microvm_provision_identity(
-    paths: &RepoPaths,
-    args: ProvisionIdentityArgs,
-) -> Result<()> {
-    validate_hostname(&args.name)?;
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+struct MicrovmVolumeSpec {
+    image: String,
+    size: u64,
+    #[serde(rename = "mountPoint")]
+    mount_point: Option<String>,
+    #[serde(default, rename = "autoCreate")]
+    auto_create: bool,
+}
 
-    let target_host = args
-        .target_host
-        .unwrap_or_else(|| format!("{}-admin", args.parent));
-    let host_keys_dir = args
-        .host_keys_dir
-        .map(PathBuf::from)
-        .unwrap_or_else(|| paths.host_keys_dir(&args.name));
+pub fn run_microvm_provision(paths: &RepoPaths, args: ProvisionArgs) -> Result<()> {
+    validate_hostname(&args.guest)?;
 
-    let private_key = host_keys_dir.join("ssh_host_ed25519_key");
-    let public_key = host_keys_dir.join("ssh_host_ed25519_key.pub");
-    if !private_key.is_file() || !public_key.is_file() {
+    let volumes = load_microvm_volumes(paths, &args.guest)?;
+    let volume = resolve_volume_spec(&args.guest, volumes)?;
+    let image_path = volume.image;
+    let volume_mount_point = volume.mount_point;
+    let auto_create = volume.auto_create;
+    let mapper_name = "cryptroot".to_string();
+
+    if auto_create {
+        println!(
+            "Skipping provisioning for {}: autoCreate=true, so the microVM service will create it at boot.",
+            image_path
+        );
+        return Ok(());
+    }
+
+    require_cmd("ssh")?;
+    require_cmd("scp")?;
+    require_cmd("nix")?;
+
+    let encrypt_root = !args.no_encrypt;
+    let key_file = args.key_file.map(PathBuf::from);
+    if encrypt_root {
+        let Some(key_file) = key_file.as_ref() else {
+            return fail("--key-file is required unless --no-encrypt is set");
+        };
+        if !key_file.is_file() {
+            return fail(format!("Key file not found: {}", key_file.display()));
+        }
+    }
+
+    let install_ssh_host_keys = args.install_ssh_host_keys.map(PathBuf::from);
+    if let Some(keys_dir) = install_ssh_host_keys.as_ref() {
+        validate_ssh_host_keys_dir(keys_dir)?;
+    }
+
+    if encrypt_root {
+        if volume_mount_point.is_some() {
+            return fail(format!(
+                "This command expects mountPoint=null for encrypted provisioning so the guest root is mounted from the LUKS mapper: {}",
+                volume_mount_point.as_deref().unwrap()
+            ));
+        }
+    }
+
+    let mount_point = args
+        .mount_point
+        .unwrap_or_else(|| format!("/mnt/{}-root", args.guest));
+    let remote_key_path = format!("/tmp/{}-root.key", args.guest);
+    let remote_ssh_host_key_path = format!("/tmp/{}-ssh_host_ed25519_key", args.guest);
+    let remote_ssh_host_key_pub_path = format!("{remote_ssh_host_key_path}.pub");
+
+    let mut cleanup = ProvisioningCleanup::new(
+        args.parent.clone(),
+        mount_point.clone(),
+        mapper_name.clone(),
+        encrypt_root,
+        remote_key_path.clone(),
+        remote_ssh_host_key_path.clone(),
+        remote_ssh_host_key_pub_path.clone(),
+    );
+
+    let system_store_path = resolve_system_store_path(
+        paths,
+        &args.guest,
+        args.builder_policy.as_deref(),
+        args.system_store_path.as_deref(),
+    )?;
+    if !system_store_path.starts_with("/nix/store/") {
+        return fail(format!("Invalid system store path: {system_store_path}"));
+    }
+
+    println!("Checking remote image state...");
+    if encrypt_root
+        && run_remote_status(
+            &args.parent,
+            &format!("test -e /dev/mapper/{}", shell_quote(&mapper_name)),
+        )?
+    {
         return fail(format!(
-            "missing SSH host key pair under {}; expected ssh_host_ed25519_key and ssh_host_ed25519_key.pub",
-            host_keys_dir.display()
+            "Refusing to proceed while mapper is already open: /dev/mapper/{}",
+            mapper_name
         ));
     }
 
-    let staging_dir = format!("/run/microvm-provisioning/{}", args.name);
+    let image_size = format!("{}M", volume.size);
+    if encrypt_root {
+        println!("Copying root unlock key to parent host...");
+        upload_file(&key_file.unwrap(), &args.parent, &remote_key_path)?;
+        run_remote(
+            &args.parent,
+            &format!("chmod 600 {}", shell_quote(&remote_key_path)),
+        )?;
 
-    println!("Creating runtime staging directory on {target_host}:{staging_dir}");
-    run_ssh(
-        &target_host,
-        &format!(
-            "sudo install -d -m 0700 -o root -g root '{staging_dir}' && sudo rm -f '{staging_dir}'/.provisioned '{staging_dir}'/.replace"
-        ),
-    )?;
-    let mut cleanup = RemoteProvisioningCleanup::new(target_host.clone(), staging_dir.clone());
+        println!("Formatting encrypted root image on parent host...");
+        run_remote(
+            &args.parent,
+            &format!(
+                "sudo nix shell nixpkgs#cryptsetup -c cryptsetup luksFormat --batch-mode {} {}",
+                shell_quote(&image_path),
+                shell_quote(&remote_key_path)
+            ),
+        )?;
+        run_remote(
+            &args.parent,
+            &format!(
+                "sudo chown microvm:kvm {} && sudo chmod 0660 {}",
+                shell_quote(&image_path),
+                shell_quote(&image_path)
+            ),
+        )?;
 
-    println!("Uploading host keys to runtime staging");
-    upload_file(
-        &private_key,
-        &target_host,
-        &format!("{staging_dir}/ssh_host_ed25519_key"),
-        "0600",
-    )?;
-    upload_file(
-        &public_key,
-        &target_host,
-        &format!("{staging_dir}/ssh_host_ed25519_key.pub"),
-        "0644",
-    )?;
+        println!("Opening LUKS mapping and creating filesystem...");
+        run_remote(
+            &args.parent,
+            &format!(
+                "sudo nix shell nixpkgs#cryptsetup -c cryptsetup open {} {} --key-file {}",
+                shell_quote(&image_path),
+                shell_quote(&mapper_name),
+                shell_quote(&remote_key_path)
+            ),
+        )?;
+        run_remote(
+            &args.parent,
+            &format!(
+                "sudo nix shell nixpkgs#e2fsprogs -c mkfs.ext4 /dev/mapper/{}",
+                shell_quote(&mapper_name)
+            ),
+        )?;
 
-    if args.replace {
-        run_ssh(
-            &target_host,
-            &format!("sudo touch '{staging_dir}/.replace'"),
+        println!("Mounting encrypted root...");
+        run_remote(
+            &args.parent,
+            &format!("sudo mkdir -p {}", shell_quote(&mount_point)),
+        )?;
+        run_remote(
+            &args.parent,
+            &format!(
+                "sudo mount /dev/mapper/{} {}",
+                shell_quote(&mapper_name),
+                shell_quote(&mount_point)
+            ),
+        )?;
+    } else {
+        println!("Creating plain ext4 root image on parent host...");
+        ensure_remote_parent_dir(&args.parent, &image_path)?;
+        run_remote(
+            &args.parent,
+            &format!(
+                "sudo truncate -s {} {}",
+                shell_quote(&image_size),
+                shell_quote(&image_path)
+            ),
+        )?;
+        run_remote(
+            &args.parent,
+            &format!(
+                "sudo nix shell nixpkgs#e2fsprogs -c mkfs.ext4 -F {}",
+                shell_quote(&image_path)
+            ),
+        )?;
+        run_remote(
+            &args.parent,
+            &format!(
+                "sudo chown microvm:kvm {} && sudo chmod 0660 {}",
+                shell_quote(&image_path),
+                shell_quote(&image_path)
+            ),
+        )?;
+        run_remote(
+            &args.parent,
+            &format!("sudo mkdir -p {}", shell_quote(&mount_point)),
+        )?;
+        run_remote(
+            &args.parent,
+            &format!(
+                "sudo mount -o loop {} {}",
+                shell_quote(&image_path),
+                shell_quote(&mount_point)
+            ),
         )?;
     }
 
-    println!("Restarting microVM {} on {target_host}", args.name);
-    run_ssh(
-        &target_host,
+    println!("Copying built system closure to parent host...");
+    run_command(
+        Command::new("nix")
+            .arg("copy")
+            .arg("--to")
+            .arg(format!("ssh-ng://{}", args.parent))
+            .arg(&system_store_path),
+        "failed to copy built system closure to parent host",
+    )?;
+
+    println!("Installing built system into guest root...");
+    run_remote(
+        &args.parent,
         &format!(
-            "sudo systemctl restart 'microvm-virtiofsd@{}.service' 'microvm@{}.service'",
-            args.name, args.name
+            "sudo nix shell nixpkgs#nixos-install-tools -c nixos-install --root {} --system {} --no-root-passwd --no-bootloader",
+            shell_quote(&mount_point),
+            shell_quote(&system_store_path)
         ),
     )?;
 
-    println!("Waiting for guest to persist host keys");
-    wait_for_provisioning(&target_host, &staging_dir, args.timeout)?;
+    if let Some(keys_dir) = install_ssh_host_keys.as_ref() {
+        println!("Copying SSH host keys into guest root...");
+        upload_file(
+            &keys_dir.join("ssh_host_ed25519_key"),
+            &args.parent,
+            &remote_ssh_host_key_path,
+        )?;
+        upload_file(
+            &keys_dir.join("ssh_host_ed25519_key.pub"),
+            &args.parent,
+            &remote_ssh_host_key_pub_path,
+        )?;
+        run_remote(
+            &args.parent,
+            &format!(
+                "sudo install -d -m 0755 {}/etc/ssh",
+                shell_quote(&mount_point)
+            ),
+        )?;
+        run_remote(
+            &args.parent,
+            &format!(
+                "sudo install -m 0600 {} {}/etc/ssh/ssh_host_ed25519_key",
+                shell_quote(&remote_ssh_host_key_path),
+                shell_quote(&mount_point)
+            ),
+        )?;
+        run_remote(
+            &args.parent,
+            &format!(
+                "sudo install -m 0644 {} {}/etc/ssh/ssh_host_ed25519_key.pub",
+                shell_quote(&remote_ssh_host_key_pub_path),
+                shell_quote(&mount_point)
+            ),
+        )?;
+    }
 
-    println!("Removing staged private key from {target_host}");
-    cleanup.run()?;
+    println!("Validating installed system profile...");
+    run_remote(
+        &args.parent,
+        &format!(
+            "sudo test -L {}/nix/var/nix/profiles/system",
+            shell_quote(&mount_point)
+        ),
+    )?;
+    run_remote(
+        &args.parent,
+        &format!("sudo test -e {}/etc/NIXOS", shell_quote(&mount_point)),
+    )?;
+    if install_ssh_host_keys.is_some() {
+        run_remote(
+            &args.parent,
+            &format!(
+                "sudo test -e {}/etc/ssh/ssh_host_ed25519_key",
+                shell_quote(&mount_point)
+            ),
+        )?;
+        run_remote(
+            &args.parent,
+            &format!(
+                "sudo test -e {}/etc/ssh/ssh_host_ed25519_key.pub",
+                shell_quote(&mount_point)
+            ),
+        )?;
+    }
 
-    println!("Provisioned SSH host identity for {}", args.name);
+    cleanup.cleanup();
+    println!("Restarting microVM {} on {}", args.guest, args.parent);
+    run_remote(
+        &args.parent,
+        &format!(
+            "sudo systemctl restart 'microvm-virtiofsd@{}.service' 'microvm@{}.service'",
+            args.guest, args.guest
+        ),
+    )?;
+    println!("Provisioning complete for {}", args.guest);
     Ok(())
 }
 
-fn wait_for_provisioning(target_host: &str, staging_dir: &str, timeout_seconds: u64) -> Result<()> {
-    let deadline = Instant::now() + Duration::from_secs(timeout_seconds);
-    loop {
-        if run_ssh_status(
-            target_host,
-            &format!("sudo test -e '{staging_dir}/.provisioned'"),
-        )? {
-            return Ok(());
-        }
-
-        if Instant::now() >= deadline {
-            return fail("timed out waiting for guest to acknowledge host key provisioning");
-        }
-
-        thread::sleep(Duration::from_secs(2));
+fn resolve_system_store_path(
+    paths: &RepoPaths,
+    guest: &str,
+    builder_policy: Option<&str>,
+    provided: Option<&str>,
+) -> Result<String> {
+    if let Some(system_store_path) = provided {
+        return Ok(system_store_path.trim().to_string());
     }
+
+    build_guest_system(paths, guest, builder_policy)?;
+    let output = run_command_capture(
+        Command::new("nix")
+            .arg("path-info")
+            .arg(format!(
+                ".#nixosConfigurations.{guest}.config.system.build.toplevel"
+            ))
+            .current_dir(paths.root()),
+        "failed to resolve built guest system store path",
+    )?;
+    Ok(output.trim().to_string())
 }
 
-fn upload_file(source: &Path, target_host: &str, remote_path: &str, mode: &str) -> Result<()> {
-    let source_file =
-        File::open(source).with_context(|| format!("failed to open {}", source.display()))?;
-    let status = Command::new("ssh")
-        .arg(target_host)
-        .arg(format!(
-            "sudo -n sh -c 'cat > \"$1\" && chown root:root \"$1\" && chmod \"$2\" \"$1\"' sh {} {}",
-            shell_quote(remote_path),
-            shell_quote(mode)
-        ))
-        .stdin(Stdio::from(source_file))
+fn build_guest_system(paths: &RepoPaths, guest: &str, builder_policy: Option<&str>) -> Result<()> {
+    let args = DelegatedHostArgs {
+        hostname: guest.to_string(),
+        builder_policy: builder_policy.map(ToOwned::to_owned),
+        extra_args: vec![
+            OsString::from("--no-nom"),
+            OsString::from("--accept-flake-config"),
+        ],
+    };
+    delegate::run_host_build(paths, args)
+}
+
+fn load_microvm_volumes(paths: &RepoPaths, guest: &str) -> Result<Vec<MicrovmVolumeSpec>> {
+    load_microvm_volumes_with(paths, guest, run_nix_eval_microvm_volumes)
+}
+
+fn load_microvm_volumes_with(
+    paths: &RepoPaths,
+    guest: &str,
+    eval: impl FnOnce(&RepoPaths, &str) -> Result<Option<Vec<u8>>>,
+) -> Result<Vec<MicrovmVolumeSpec>> {
+    let output = eval(paths, guest)?
+        .ok_or_else(|| anyhow::anyhow!("failed to evaluate microVM volume metadata"))?;
+    let volumes: Vec<MicrovmVolumeSpec> = serde_json::from_slice(&output)
+        .context("failed to parse microVM volume metadata from `nix eval`")?;
+    Ok(volumes)
+}
+
+fn run_nix_eval_microvm_volumes(paths: &RepoPaths, guest: &str) -> Result<Option<Vec<u8>>> {
+    let output = run_command_capture_bytes(
+        Command::new("nix")
+            .args([
+                "eval",
+                "--extra-experimental-features",
+                "nix-command flakes",
+                "--impure",
+                "--json",
+            ])
+            .arg("--expr")
+            .arg(format!(
+                "let flake = builtins.getFlake (toString {}); in flake.nixosConfigurations.\"{}\".config.microvm.volumes",
+                paths.root().canonicalize()?.display(),
+                guest
+            ))
+            .current_dir(paths.root()),
+        "failed to evaluate microVM volume metadata",
+    )?;
+
+    Ok(Some(output))
+}
+
+fn resolve_volume_spec(guest: &str, volumes: Vec<MicrovmVolumeSpec>) -> Result<MicrovmVolumeSpec> {
+    if volumes.is_empty() {
+        return fail(format!("No microvm.volumes entries found for {guest}"));
+    }
+
+    if volumes.len() > 1 {
+        return fail(format!(
+            "This command currently supports exactly one microvm.volumes entry for {guest}; found {}.",
+            volumes.len()
+        ));
+    }
+
+    Ok(volumes
+        .into_iter()
+        .next()
+        .expect("volume count checked above"))
+}
+
+fn validate_ssh_host_keys_dir(keys_dir: &Path) -> Result<()> {
+    if !keys_dir.is_dir() {
+        return fail(format!(
+            "SSH host key directory not found: {}",
+            keys_dir.display()
+        ));
+    }
+
+    let private_key = keys_dir.join("ssh_host_ed25519_key");
+    let public_key = keys_dir.join("ssh_host_ed25519_key.pub");
+    if !private_key.is_file() {
+        return fail(format!(
+            "SSH host private key not found: {}",
+            private_key.display()
+        ));
+    }
+    if !public_key.is_file() {
+        return fail(format!(
+            "SSH host public key not found: {}",
+            public_key.display()
+        ));
+    }
+
+    Ok(())
+}
+
+fn ensure_remote_parent_dir(parent: &str, image_path: &str) -> Result<()> {
+    if let Some(parent_dir) = Path::new(image_path).parent() {
+        run_remote(
+            parent,
+            &format!(
+                "sudo mkdir -p {}",
+                shell_quote(parent_dir.to_string_lossy().as_ref())
+            ),
+        )?;
+    }
+    Ok(())
+}
+
+fn upload_file(source: &Path, target_host: &str, remote_path: &str) -> Result<()> {
+    if !source.is_file() {
+        return fail(format!("missing file: {}", source.display()));
+    }
+
+    let status = Command::new("scp")
+        .arg(source)
+        .arg(format!("{target_host}:{remote_path}"))
         .status()
         .with_context(|| format!("failed to upload {}", source.display()))?;
 
@@ -125,8 +455,22 @@ fn upload_file(source: &Path, target_host: &str, remote_path: &str, mode: &str) 
     Ok(())
 }
 
-fn run_ssh(target_host: &str, remote_command: &str) -> Result<()> {
-    if run_ssh_status(target_host, remote_command)? {
+fn require_cmd(cmd: &str) -> Result<()> {
+    if Command::new("sh")
+        .arg("-lc")
+        .arg(format!("command -v {cmd} >/dev/null 2>&1"))
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+    {
+        return Ok(());
+    }
+
+    fail(format!("Missing required command: {cmd}"))
+}
+
+fn run_remote(target_host: &str, remote_command: &str) -> Result<()> {
+    if run_remote_status(target_host, remote_command)? {
         Ok(())
     } else {
         fail(format!(
@@ -135,7 +479,7 @@ fn run_ssh(target_host: &str, remote_command: &str) -> Result<()> {
     }
 }
 
-fn run_ssh_status(target_host: &str, remote_command: &str) -> Result<bool> {
+fn run_remote_status(target_host: &str, remote_command: &str) -> Result<bool> {
     let status = Command::new("ssh")
         .arg(target_host)
         .arg(remote_command)
@@ -145,62 +489,139 @@ fn run_ssh_status(target_host: &str, remote_command: &str) -> Result<bool> {
     Ok(status.success())
 }
 
-fn cleanup_command(staging_dir: &str) -> String {
-    format!(
-        "sudo rm -f {} {} {} {}",
-        shell_quote(&format!("{staging_dir}/ssh_host_ed25519_key")),
-        shell_quote(&format!("{staging_dir}/ssh_host_ed25519_key.pub")),
-        shell_quote(&format!("{staging_dir}/.provisioned")),
-        shell_quote(&format!("{staging_dir}/.replace")),
-    )
+fn run_command(command: &mut Command, context: &str) -> Result<()> {
+    let status = command.status().with_context(|| context.to_string())?;
+    if status.success() {
+        Ok(())
+    } else {
+        fail(context)
+    }
+}
+
+fn run_command_capture(command: &mut Command, context: &str) -> Result<String> {
+    let output = command.output().with_context(|| context.to_string())?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        fail(format!("{context}: {}", stderr.trim()))
+    }
+}
+
+fn run_command_capture_bytes(command: &mut Command, context: &str) -> Result<Vec<u8>> {
+    let output = command.output().with_context(|| context.to_string())?;
+    if output.status.success() {
+        Ok(output.stdout)
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        fail(format!("{context}: {}", stderr.trim()))
+    }
 }
 
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
-struct RemoteProvisioningCleanup {
+struct ProvisioningCleanup {
     target_host: String,
-    staging_dir: String,
+    mount_point: String,
+    mapper_name: String,
+    encrypt_root: bool,
+    remote_key_path: String,
+    remote_ssh_host_key_path: String,
+    remote_ssh_host_key_pub_path: String,
     active: bool,
 }
 
-impl RemoteProvisioningCleanup {
-    fn new(target_host: String, staging_dir: String) -> Self {
+impl ProvisioningCleanup {
+    fn new(
+        target_host: String,
+        mount_point: String,
+        mapper_name: String,
+        encrypt_root: bool,
+        remote_key_path: String,
+        remote_ssh_host_key_path: String,
+        remote_ssh_host_key_pub_path: String,
+    ) -> Self {
         Self {
             target_host,
-            staging_dir,
+            mount_point,
+            mapper_name,
+            encrypt_root,
+            remote_key_path,
+            remote_ssh_host_key_path,
+            remote_ssh_host_key_pub_path,
             active: true,
         }
     }
 
-    fn run(&mut self) -> Result<()> {
-        let command = cleanup_command(&self.staging_dir);
-        run_ssh(&self.target_host, &command)?;
+    fn cleanup(&mut self) {
+        let _ = run_remote(
+            &self.target_host,
+            &format!(
+                "sudo umount {} >/dev/null 2>&1 || true",
+                shell_quote(&self.mount_point)
+            ),
+        );
+        if self.encrypt_root {
+            let _ = run_remote(
+                &self.target_host,
+                &format!(
+                    "sudo nix shell nixpkgs#cryptsetup -c cryptsetup close {} >/dev/null 2>&1 || true",
+                    shell_quote(&self.mapper_name)
+                ),
+            );
+        }
+        let _ = run_remote(
+            &self.target_host,
+            &format!(
+                "rm -f {} >/dev/null 2>&1 || true",
+                shell_quote(&self.remote_key_path)
+            ),
+        );
+        let _ = run_remote(
+            &self.target_host,
+            &format!(
+                "rm -f {} {} >/dev/null 2>&1 || true",
+                shell_quote(&self.remote_ssh_host_key_path),
+                shell_quote(&self.remote_ssh_host_key_pub_path)
+            ),
+        );
+
         self.active = false;
-        Ok(())
     }
 }
 
-impl Drop for RemoteProvisioningCleanup {
+impl Drop for ProvisioningCleanup {
     fn drop(&mut self) {
-        if !self.active {
-            return;
-        }
-
-        let command = cleanup_command(&self.staging_dir);
-        if let Err(err) = run_ssh(&self.target_host, &command) {
-            eprintln!(
-                "warning: failed to clean remote MicroVM provisioning files on {}: {err:#}",
-                self.target_host
-            );
+        if self.active {
+            self.cleanup();
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{cleanup_command, shell_quote};
+    use super::{load_microvm_volumes_with, resolve_volume_spec, shell_quote, MicrovmVolumeSpec};
+    use crate::repo::RepoPaths;
+    use std::fs;
+    use std::path::Path;
+    use tempfile::tempdir;
+
+    fn write_semble_toml(root: &Path) {
+        fs::write(
+            root.join("semble.toml"),
+            r#"
+[paths]
+hosts_dir = "hosts"
+host_template_dir = "hosts/_template"
+ssh_host_keys_dir = "ssh_host_keys"
+sops_config_file = ".sops.yaml"
+network_secrets_file = "secrets/network.yaml"
+"#,
+        )
+        .unwrap();
+    }
 
     #[test]
     fn quotes_shell_values() {
@@ -209,10 +630,63 @@ mod tests {
     }
 
     #[test]
-    fn builds_cleanup_command() {
-        assert_eq!(
-            cleanup_command("/run/microvm-provisioning/claw"),
-            "sudo rm -f '/run/microvm-provisioning/claw/ssh_host_ed25519_key' '/run/microvm-provisioning/claw/ssh_host_ed25519_key.pub' '/run/microvm-provisioning/claw/.provisioned' '/run/microvm-provisioning/claw/.replace'"
-        );
+    fn resolves_single_volume_spec() {
+        let spec = resolve_volume_spec(
+            "claw",
+            vec![MicrovmVolumeSpec {
+                image: "/var/lib/microvms/claw/root.img".into(),
+                size: 4096,
+                mount_point: None,
+                auto_create: false,
+            }],
+        )
+        .unwrap();
+
+        assert_eq!(spec.image, "/var/lib/microvms/claw/root.img");
+        assert_eq!(spec.size, 4096);
+    }
+
+    #[test]
+    fn rejects_multiple_volume_specs() {
+        let error = resolve_volume_spec(
+            "claw",
+            vec![
+                MicrovmVolumeSpec {
+                    image: "/var/lib/microvms/claw/root.img".into(),
+                    size: 4096,
+                    mount_point: None,
+                    auto_create: false,
+                },
+                MicrovmVolumeSpec {
+                    image: "/var/lib/microvms/claw/data.img".into(),
+                    size: 1024,
+                    mount_point: None,
+                    auto_create: false,
+                },
+            ],
+        )
+        .unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("supports exactly one microvm.volumes entry"));
+    }
+
+    #[test]
+    fn loads_microvm_volumes_from_eval_output() {
+        let tempdir = tempdir().unwrap();
+        write_semble_toml(tempdir.path());
+        let paths = RepoPaths::new(tempdir.path()).unwrap();
+        let volumes = load_microvm_volumes_with(&paths, "claw", |_paths, _guest| {
+            Ok(Some(
+                br#"[{"image":"/var/lib/microvms/claw/root.img","size":4096,"mountPoint":null,"autoCreate":false}]"#
+                    .to_vec(),
+            ))
+        })
+        .unwrap();
+
+        assert_eq!(volumes.len(), 1);
+        assert_eq!(volumes[0].image, "/var/lib/microvms/claw/root.img");
+        assert_eq!(volumes[0].size, 4096);
     }
 }
