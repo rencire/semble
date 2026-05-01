@@ -8,8 +8,8 @@ A specific managed system.
 
 ## Host Definition
 
-The file at `hosts/<name>/default.nix` that defines host identity and host
-composition selections.
+The file at `hosts/<name>/default.nix` that defines host identity, host
+type, provisioning topology, and host composition selections.
 
 ## Profile
 

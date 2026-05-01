@@ -21,6 +21,8 @@ The ownership of those steps differs by workflow:
 ## MicroVM Guest Provisioning
 
 In the MicroVM case, the target is a guest image managed on the parent host.
+For the lower-level guest setup checklist, see
+[docs/microvm-guest-lifecycle.md](./microvm-guest-lifecycle.md).
 
 1. The guest configuration is defined first.
 2. The root image is created or formatted on the parent host.
@@ -47,6 +49,19 @@ The flows share a broad structure, but the provisioning target is different:
 
 That distinction is why Semble should keep separate command shapes for these
 workflows even if the high-level steps look similar.
+
+## Host Type Comparison
+
+This table compares the current public command shape against the two host
+types discussed in the lifecycle docs.
+
+| Command | Physical host | MicroVM host |
+|---|---|---|
+| `host create` | Scaffold a normal host directory from the selected template. | Scaffold a MicroVM-backed host definition and note the parent-host requirement. |
+| `host build` | Build the host config for a real machine. | Build the guest config that will become the MicroVM image. |
+| `host switch` | Deploy the host config to the physical machine and activate it there. | Deploy the parent host config so it wires up and starts the MicroVM guest. |
+| `host provision` | Install the system onto the target machine, including disk prep and reboot/activate. | Provision the guest image on the parent host, then require a parent-host switch to make it runnable. |
+| `host delete` | Remove the host scaffold, keys, and related metadata. | Remove the MicroVM host scaffold, guest identity, and related metadata. |
 
 ## Under The Hood
 

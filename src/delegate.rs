@@ -1,6 +1,8 @@
-use crate::cli::DelegatedHostArgs;
+use crate::cli::{DelegatedHostArgs, HostProvisionArgs, ProvisionArgs};
 use crate::config::BuilderPolicyConfig;
+use crate::microvm;
 use crate::repo::RepoPaths;
+use crate::repo::{load_host_provision_config, HostType};
 use anyhow::Result;
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -45,9 +47,9 @@ fn normalize_builder_policy(args: DelegatedHostArgs) -> Result<DelegatedHostArgs
 
     while let Some(arg) = iter.next() {
         if arg == "--builder-policy" {
-            let value = iter.next().ok_or_else(|| {
-                anyhow::anyhow!("`--builder-policy` requires a policy name")
-            })?;
+            let value = iter
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("`--builder-policy` requires a policy name"))?;
             let value = value
                 .into_string()
                 .map_err(|_| anyhow::anyhow!("`--builder-policy` value must be valid UTF-8"))?;
@@ -173,7 +175,31 @@ pub fn run_host_switch(paths: &RepoPaths, args: DelegatedHostArgs) -> Result<()>
     ))
 }
 
-pub fn run_host_provision(paths: &RepoPaths, args: DelegatedHostArgs) -> Result<()> {
+pub fn run_host_provision(paths: &RepoPaths, args: HostProvisionArgs) -> Result<()> {
+    let host = load_host_provision_config(paths, &args.hostname)?;
+    match host.host_type {
+        HostType::Physical => run_physical_host_provision(paths, args),
+        HostType::Microvm => run_microvm_host_provision(paths, host, args),
+    }
+}
+
+fn run_physical_host_provision(paths: &RepoPaths, args: HostProvisionArgs) -> Result<()> {
+    if args.key_file.is_some()
+        || args.install_ssh_host_keys.is_some()
+        || args.system_store_path.is_some()
+        || args.no_encrypt
+        || args.force_reformat
+    {
+        return Err(anyhow::anyhow!(
+            "microvm-specific provisioning flags are only valid for hosts with `type = \"microvm\"`"
+        ));
+    }
+
+    let args = DelegatedHostArgs {
+        hostname: args.hostname,
+        builder_policy: args.builder_policy,
+        extra_args: args.extra_args,
+    };
     let args = normalize_builder_policy(args)?;
     let _env_guard = apply_builder_policy(paths, &args)?;
     if let Some(policy_name) = args.builder_policy.as_deref() {
@@ -209,6 +235,39 @@ pub fn run_host_provision(paths: &RepoPaths, args: DelegatedHostArgs) -> Result<
         return tianyi::run_args(provision_host_args(&args));
     }
     tianyi::run_args(provision_host_args(&args))
+}
+
+fn run_microvm_host_provision(
+    paths: &RepoPaths,
+    host: crate::repo::HostProvisionConfig,
+    args: HostProvisionArgs,
+) -> Result<()> {
+    if !args.extra_args.is_empty() {
+        return Err(anyhow::anyhow!(
+            "microvm host provisioning does not accept trailing passthrough arguments"
+        ));
+    }
+
+    let parent = host.provision_target.ok_or_else(|| {
+        anyhow::anyhow!(
+            "missing required field `provisionTarget` for microvm host `{}`",
+            args.hostname
+        )
+    })?;
+
+    microvm::run_microvm_provision(
+        paths,
+        ProvisionArgs {
+            guest: args.hostname,
+            parent,
+            builder_policy: args.builder_policy,
+            key_file: args.key_file,
+            install_ssh_host_keys: args.install_ssh_host_keys,
+            system_store_path: args.system_store_path,
+            no_encrypt: args.no_encrypt,
+            force_reformat: args.force_reformat,
+        },
+    )
 }
 
 #[cfg(test)]
@@ -320,10 +379,7 @@ mod tests {
 
         let normalized = normalize_switch_args(args);
 
-        assert_eq!(
-            strings(&normalized.extra_args),
-            vec!["--dry-run", "--ask"]
-        );
+        assert_eq!(strings(&normalized.extra_args), vec!["--dry-run", "--ask"]);
     }
 
     #[test]
@@ -454,10 +510,7 @@ mod tests {
         let args = DelegatedHostArgs {
             hostname: String::from("thor"),
             builder_policy: Some(String::from("l380y")),
-            extra_args: vec![
-                OsString::from("--builder-policy"),
-                OsString::from("other"),
-            ],
+            extra_args: vec![OsString::from("--builder-policy"), OsString::from("other")],
         };
 
         let error = normalize_builder_policy(args).unwrap_err();

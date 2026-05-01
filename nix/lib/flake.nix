@@ -63,6 +63,13 @@ in
             prepare = resolvedImage.image.prepare;
           }
         ) project.imagesByKey;
+        hosts = lib.mapAttrs (
+          key: host:
+          {
+            type = host.type;
+            provisionTarget = host.provisionTarget or null;
+          }
+        ) project.hostsByKey;
       };
     };
 }

@@ -1,6 +1,7 @@
 use crate::config::{BuilderPolicyConfig, SembleConfig};
 use anyhow::Context;
 use anyhow::Result;
+use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -59,7 +60,6 @@ impl RepoPaths {
             .iter()
             .find(|policy| policy.name == name)
     }
-
 }
 
 #[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
@@ -76,6 +76,89 @@ pub fn load_image_prepare_config(
             "missing image prepare metadata for `{image_name}`; expected `prepare.partitionLabel` in the image definition"
         )
     })
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum HostType {
+    Physical,
+    Microvm,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct HostProvisionConfig {
+    #[serde(rename = "type")]
+    pub host_type: HostType,
+    #[serde(default, rename = "provisionTarget")]
+    pub provision_target: Option<String>,
+}
+
+pub fn load_host_provision_config(
+    paths: &RepoPaths,
+    host_name: &str,
+) -> Result<HostProvisionConfig> {
+    load_host_provision_config_from_nix(paths, host_name)?.ok_or_else(|| {
+        anyhow::anyhow!(
+            "missing host metadata for `{host_name}`; expected `type` and optional `provisionTarget` in the host definition"
+        )
+    })
+}
+
+fn load_host_provision_config_from_nix(
+    paths: &RepoPaths,
+    host_name: &str,
+) -> Result<Option<HostProvisionConfig>> {
+    load_host_provision_config_with(paths, host_name, run_nix_eval_host_provision_config)
+}
+
+fn load_host_provision_config_with(
+    paths: &RepoPaths,
+    host_name: &str,
+    eval: impl FnOnce(&RepoPaths, &str) -> Result<Option<Vec<u8>>>,
+) -> Result<Option<HostProvisionConfig>> {
+    let Some(stdout) = eval(paths, host_name)? else {
+        return Ok(None);
+    };
+
+    let metadata: Option<HostProvisionConfig> =
+        serde_json::from_slice(&stdout).context("failed to parse host metadata from `nix eval`")?;
+
+    Ok(metadata)
+}
+
+fn run_nix_eval_host_provision_config(
+    paths: &RepoPaths,
+    host_name: &str,
+) -> Result<Option<Vec<u8>>> {
+    let canonical_root = paths
+        .root()
+        .canonicalize()
+        .with_context(|| format!("failed to canonicalize {}", paths.root().display()))?;
+    let expr = format!(
+        "let flake = builtins.getFlake (toString {}); in flake._semble.hosts.\"{}\" or null",
+        canonical_root.display(),
+        host_name
+    );
+    let output = Command::new("nix")
+        .args([
+            "eval",
+            "--extra-experimental-features",
+            "nix-command flakes",
+            "--impure",
+            "--json",
+            "--expr",
+            &expr,
+        ])
+        .current_dir(paths.root())
+        .output();
+
+    let output = match output {
+        Ok(output) => output,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(err).context("failed to run `nix eval` for host metadata"),
+    };
+
+    parse_nix_eval_output(output)
 }
 
 fn load_image_prepare_config_from_nix(
@@ -168,7 +251,8 @@ fn parse_nix_eval_output(output: Output) -> Result<Option<Vec<u8>>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        load_image_prepare_config_with, parse_nix_eval_output, ImagePrepareConfig, RepoPaths,
+        load_host_provision_config_with, load_image_prepare_config_with, parse_nix_eval_output,
+        HostProvisionConfig, HostType, ImagePrepareConfig, RepoPaths,
     };
     use anyhow::anyhow;
     use std::fs;
@@ -209,6 +293,27 @@ network_secrets_file = "secrets/network.yaml"
             config.unwrap(),
             ImagePrepareConfig {
                 partition_label: "NIXOS_SD".into()
+            }
+        );
+    }
+
+    #[test]
+    fn parses_host_metadata_from_eval_output() {
+        let tempdir = tempdir().unwrap();
+        write_minimal_semble_toml(tempdir.path());
+        let paths = RepoPaths::new(tempdir.path()).unwrap();
+        let config = load_host_provision_config_with(&paths, "atlas", |_paths, _host_name| {
+            Ok(Some(
+                br#"{"type":"microvm","provisionTarget":"thor-admin"}"#.to_vec(),
+            ))
+        })
+        .unwrap();
+
+        assert_eq!(
+            config.unwrap(),
+            HostProvisionConfig {
+                host_type: HostType::Microvm,
+                provision_target: Some("thor-admin".into())
             }
         );
     }

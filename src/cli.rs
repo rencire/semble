@@ -28,7 +28,7 @@ pub enum HostCommand {
     Keys(KeysArgs),
     Build(DelegatedHostArgs),
     Switch(DelegatedHostArgs),
-    Provision(DelegatedHostArgs),
+    Provision(HostProvisionArgs),
 }
 
 #[derive(Debug, Args)]
@@ -70,6 +70,25 @@ pub struct DelegatedHostArgs {
     pub hostname: String,
     #[arg(long)]
     pub builder_policy: Option<String>,
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    pub extra_args: Vec<OsString>,
+}
+
+#[derive(Debug, Args)]
+pub struct HostProvisionArgs {
+    pub hostname: String,
+    #[arg(long)]
+    pub builder_policy: Option<String>,
+    #[arg(long)]
+    pub key_file: Option<String>,
+    #[arg(long)]
+    pub install_ssh_host_keys: Option<String>,
+    #[arg(long)]
+    pub system_store_path: Option<String>,
+    #[arg(long)]
+    pub no_encrypt: bool,
+    #[arg(long)]
+    pub force_reformat: bool,
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub extra_args: Vec<OsString>,
 }
@@ -172,6 +191,17 @@ mod tests {
                 "host",
                 "provision",
                 "atlas",
+                "--builder-policy",
+                "l380y",
+                "--key-file",
+                "secrets/luks_root_keys/atlas.key",
+                "--install-ssh-host-keys",
+                "ssh_host_keys/atlas",
+                "--system-store-path",
+                "/nix/store/test-system",
+                "--no-encrypt",
+                "--force-reformat",
+                "--",
                 "--debug",
                 "--phases",
                 "disko,install",

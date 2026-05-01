@@ -4,6 +4,7 @@ let
     assertAllowedFields
     assertAttrset
     assertAttrsOrFunction
+    assertCondition
     assertListOfStrings
     assertOptionalAttrset
     assertOptionalPath
@@ -24,10 +25,36 @@ let
     }:
     let
       raw = assertAttrset path (import path);
-      value = assertAllowedFields path [ "hostName" "system" "builder" "profiles" "presets" "modules" "inputModules" "configFile" "configuration" ] raw;
+      value = assertAllowedFields path [ "hostName" "system" "builder" "type" "provisionTarget" "profiles" "presets" "modules" "inputModules" "configFile" "configuration" ] raw;
       hostName = assertString path "hostName" (value.hostName or (fileError path "missing required field `hostName`"));
       system = assertString path "system" (value.system or (fileError path "missing required field `system`"));
       builder = assertString path "builder" (value.builder or "nixpkgs.lib.nixosSystem");
+      hostType = assertString path "type" (value.type or (fileError path "missing required field `type`"));
+      _typeCheck =
+        assertCondition
+          path
+          (builtins.elem hostType [ "physical" "microvm" ])
+          "field `type` must be one of `physical` or `microvm`";
+      provisionTarget =
+        if value ? provisionTarget then
+          assertString path "provisionTarget" value.provisionTarget
+        else
+          null;
+      _provisionCheck =
+        assertCondition
+          path
+          (
+            if hostType == "microvm" then
+              provisionTarget != null
+            else
+              provisionTarget == null
+          )
+          (
+            if hostType == "microvm" then
+              "missing required field `provisionTarget` for microvm host"
+            else
+              "field `provisionTarget` is only supported for `type = \"microvm\"`"
+          );
       profiles = assertUniqueValues path "profile selection" (assertListOfStrings path "profiles" (value.profiles or [ ]));
       presets = assertUniqueValues path "preset selection" (assertListOfStrings path "presets" (value.presets or [ ]));
       modules = assertUniqueValues path "module selection" (assertListOfStrings path "modules" (value.modules or [ ]));
@@ -51,6 +78,8 @@ let
         inherit relativePath;
       };
       inherit hostName system builder profiles presets modules inputModules configuration configFile;
+      type = hostType;
+      inherit provisionTarget;
       configFileExplicit = value ? configFile;
     };
 

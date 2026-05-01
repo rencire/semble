@@ -91,6 +91,8 @@ pub fn run_microvm_provision(paths: &RepoPaths, args: ProvisionArgs) -> Result<(
         return fail(format!("Invalid system store path: {system_store_path}"));
     }
 
+    ensure_remote_microvm_owner(&args.parent)?;
+
     println!("Checking remote image state...");
     if encrypt_root
         && run_remote_status(
@@ -122,14 +124,9 @@ pub fn run_microvm_provision(paths: &RepoPaths, args: ProvisionArgs) -> Result<(
                 shell_quote(&remote_key_path)
             ),
         )?;
-        run_remote(
-            &args.parent,
-            &format!(
-                "sudo chown microvm:kvm {} && sudo chmod 0660 {}",
-                shell_quote(&image_path),
-                shell_quote(&image_path)
-            ),
-        )?;
+        log_remote_parent_dir_owner(&args.parent, &image_path)?;
+        ensure_remote_image_owner(&args.parent, &image_path)?;
+        log_remote_image_owner(&args.parent, &image_path)?;
 
         println!("Opening LUKS mapping and creating filesystem...");
         run_remote(
@@ -180,14 +177,9 @@ pub fn run_microvm_provision(paths: &RepoPaths, args: ProvisionArgs) -> Result<(
                 shell_quote(&image_path)
             ),
         )?;
-        run_remote(
-            &args.parent,
-            &format!(
-                "sudo chown microvm:kvm {} && sudo chmod 0660 {}",
-                shell_quote(&image_path),
-                shell_quote(&image_path)
-            ),
-        )?;
+        log_remote_parent_dir_owner(&args.parent, &image_path)?;
+        ensure_remote_image_owner(&args.parent, &image_path)?;
+        log_remote_image_owner(&args.parent, &image_path)?;
         run_remote(
             &args.parent,
             &format!("sudo mkdir -p {}", shell_quote(&mount_point)),
@@ -289,14 +281,6 @@ pub fn run_microvm_provision(paths: &RepoPaths, args: ProvisionArgs) -> Result<(
     }
 
     cleanup.cleanup();
-    println!("Restarting microVM {} on {}", args.guest, args.parent);
-    run_remote(
-        &args.parent,
-        &format!(
-            "sudo systemctl restart 'microvm-virtiofsd@{}.service' 'microvm@{}.service'",
-            args.guest, args.guest
-        ),
-    )?;
     println!("Provisioning complete for {}", args.guest);
     Ok(())
 }
@@ -428,6 +412,64 @@ fn ensure_remote_parent_dir(parent: &str, image_path: &str) -> Result<()> {
                 shell_quote(parent_dir.to_string_lossy().as_ref())
             ),
         )?;
+        run_remote(
+            parent,
+            &format!(
+                "sudo chown microvm:kvm {} && sudo chmod 2775 {}",
+                shell_quote(parent_dir.to_string_lossy().as_ref()),
+                shell_quote(parent_dir.to_string_lossy().as_ref())
+            ),
+        )?;
+    }
+    Ok(())
+}
+
+fn ensure_remote_microvm_owner(parent: &str) -> Result<()> {
+    let status = run_remote_status(
+        parent,
+        "getent passwd microvm >/dev/null 2>&1 && getent group kvm >/dev/null 2>&1",
+    )?;
+    if status {
+        return Ok(());
+    }
+
+    fail(format!(
+        "parent host {parent} must provide the `microvm` user and `kvm` group so Semble can hand off the guest image with microvm:kvm ownership"
+    ))
+}
+
+fn ensure_remote_image_owner(parent: &str, image_path: &str) -> Result<()> {
+    run_remote(
+        parent,
+        &format!(
+            "sudo chown microvm:kvm {} && sudo chmod 0660 {}",
+            shell_quote(image_path),
+            shell_quote(image_path)
+        ),
+    )
+}
+
+fn log_remote_image_owner(parent: &str, image_path: &str) -> Result<()> {
+    let output = run_command_capture(
+        Command::new("ssh")
+            .arg(parent)
+            .arg(format!("stat -c '%U:%G %a %n' {}", shell_quote(image_path))),
+        "failed to inspect remote image ownership",
+    )?;
+    println!("Image ownership on parent host: {}", output.trim());
+    Ok(())
+}
+
+fn log_remote_parent_dir_owner(parent: &str, image_path: &str) -> Result<()> {
+    if let Some(parent_dir) = Path::new(image_path).parent() {
+        let output = run_command_capture(
+            Command::new("ssh").arg(parent).arg(format!(
+                "stat -c '%U:%G %a %n' {}",
+                shell_quote(parent_dir.to_string_lossy().as_ref())
+            )),
+            "failed to inspect remote parent directory ownership",
+        )?;
+        println!("Parent directory ownership on host: {}", output.trim());
     }
     Ok(())
 }

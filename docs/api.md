@@ -190,6 +190,7 @@ Each host lives at `hosts/<name>/default.nix`.
 {
   hostName = "atlas";
   system = "x86_64-linux";
+  type = "physical";
 
   profiles = [ "base" ];
   presets = [ "security.sopsDefault" ];
@@ -206,9 +207,13 @@ Supported host fields:
 - `hostName`: The host identity. Semble also defaults `networking.hostName` to
   this value.
 - `system`: The target system string, such as `"x86_64-linux"`.
+- `type`: Required host lifecycle type. Supported values are `"physical"` and
+  `"microvm"`.
 - `builder`: Optional attr-path string selecting the system constructor. Defaults
   to `nixpkgs.lib.nixosSystem`. This allows alternate host backends such as
   `nixos-raspberrypi.lib.nixosSystemFull`.
+- `provisionTarget`: Required for `type = "microvm"`. SSH destination used when
+  provisioning the guest image on the parent machine.
 - `profiles`: A list of profile keys to include.
 - `presets`: A list of preset keys to include directly.
 - `modules`: A list of local Semble module keys to include directly for this host.
@@ -227,6 +232,7 @@ Example custom SSH alias override:
 {
   hostName = "genesis";
   system = "x86_64-linux";
+  type = "physical";
 
   presets = [ "installer" ];
 
@@ -264,6 +270,7 @@ explicitly:
 {
   hostName = "atlas";
   system = "x86_64-linux";
+  type = "physical";
 
   profiles = [ "base" ];
   presets = [ "security.sopsDefault" ];
@@ -279,6 +286,7 @@ Hosts may also define inline configuration directly in `default.nix`:
 {
   hostName = "atlas";
   system = "x86_64-linux";
+  type = "physical";
 
   configuration = {
     services.openssh.enable = true;
@@ -292,11 +300,29 @@ Hosts that need a non-default constructor can override `builder`:
 {
   hostName = "vishnu";
   system = "aarch64-linux";
+  type = "physical";
   builder = "nixos-raspberrypi.lib.nixosSystemFull";
 
   inputModules = [
     "nixos-raspberrypi.raspberry-pi-02.base"
     "nixos-raspberrypi.usb-gadget-ethernet"
+  ];
+}
+```
+
+MicroVM-backed hosts can declare their provisioning target directly:
+
+```nix
+{
+  hostName = "test-mvm";
+  system = "x86_64-linux";
+  type = "microvm";
+  provisionTarget = "thor-admin";
+
+  presets = [ "base" "microvm-guest" "vpn-access" ];
+  modules = [
+    "boot.initrd-ssh-keyfile-unlock"
+    "network.initrd-static"
   ];
 }
 ```

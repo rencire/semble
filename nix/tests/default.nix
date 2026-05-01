@@ -132,6 +132,7 @@ in
   hostInlineAndConfigFileMerge = assert (cedarConfig.environment.variables.CEDAR_INLINE == "enabled"); true;
   hostModulesApply = assert (hostConfig.environment.variables.EXTRA_MODULE == "enabled"); true;
   hostNameOrder = assert (hostConfig.networking.hostName == "atlas-lab"); true;
+  hostTypeIsPreserved = assert (resolved.host.type == "physical"); true;
   defaultHostNameWins = assert (beaconConfig.networking.hostName == "beacon"); true;
   missingDefaultConfigIsEmpty = assert (beaconConfig.environment.variables.SEMBLE_MESSAGE == "from-preset"); true;
   presetValuesApply = assert (hostConfig.services.openssh.hostKeys == [ { path = "/preset/key"; type = "rsa"; } ]); true;
@@ -152,6 +153,8 @@ in
   duplicateModuleDedupes = assert (map (moduleDef: moduleDef.key) resolvedDuplicateModule.moduleDefs == [ "shared" ]); true;
   duplicateInputOverlapDedupes = assert (map (selection: selection.key) resolvedDuplicateInputOverlap.explicitInputSelections == [ "fake.secrets" ]); true;
   duplicateInputOverlapConfigApplies = assert (duplicateInputOverlapConfig.environment.variables.FAKE_INPUT == "enabled"); true;
+  microvmHostType = assert (project.hostsByKey.beacon.type == "microvm"); true;
+  microvmHostProvisionTarget = assert (project.hostsByKey.beacon.provisionTarget == "thor-admin"); true;
   unknownPresetFails = expectFailure unknownPresetRoot;
   missingConfigFails = expectFailure missingConfigRoot;
   unknownImageHostFails = expectFailure unknownImageHostRoot;
