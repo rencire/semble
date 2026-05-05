@@ -12,4 +12,4 @@ This file tracks significant changes, architectural decisions, and "lessons lear
 
 ## General Guidelines
 - Make the change easy, then make the easy change.
-- Prefer locality of changes over ambient design improvements done without user confirmation.
+- Prefer locality of changes over broad design improvements done without user confirmation.
