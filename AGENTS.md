@@ -3,7 +3,7 @@
 This file tracks significant changes, architectural decisions, and "lessons learned" by AI agents (like Antigravity) working on this codebase.
 
 ## Commit Style
-- We use jj tool.
+- We use Git for version control so `entire` has full integration.
 - Use [Commitizen Conventional Commits](https://commitizen-tools.github.io/commitizen/): `type(scope): subject`
 - Keep the subject line imperative and concise (for example: `feat(hostctl): add ssh alias subcommands`).
 - Prefer one logical change per commit; avoid bundling unrelated edits.
