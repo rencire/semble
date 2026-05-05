@@ -3,6 +3,18 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    flakelight = {
+      url = "github:accelbread/flakelight";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    agent-skills = {
+      url = "github:Kyure-A/agent-skills-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    personal-skills = {
+      url = "github:rencire/agent-skills";
+      flake = false;
+    };
     nix-wrapper-modules = {
       url = "github:BirdeeHub/nix-wrapper-modules";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -30,9 +42,40 @@
       entire-cli-nix,
       confix,
       ...
-    }:
+    }@inputs:
     let
       lib = nixpkgs.lib;
+      agentLib = inputs."agent-skills".lib."agent-skills";
+      sources = {
+        shared = {
+          path = inputs."personal-skills";
+          subdir = "skills";
+        };
+      };
+      enabledSkills = [
+        "dev-loop"
+        "doc-table-of-contents"
+        "nix-repo"
+        "public-repo-readiness"
+        "vcs"
+      ];
+      catalog = agentLib.discoverCatalog sources;
+      allowlist = agentLib.allowlistFor {
+        inherit catalog sources;
+        enable = enabledSkills;
+      };
+      selection = agentLib.selectSkills {
+        inherit catalog allowlist sources;
+        skills = { };
+      };
+      localTargets = {
+        agents = agentLib.defaultLocalTargets.agents // {
+          enable = true;
+        };
+        claude = agentLib.defaultLocalTargets.claude // {
+          enable = false;
+        };
+      };
       systems = [
         "aarch64-darwin"
         "aarch64-linux"
@@ -75,19 +118,33 @@
         pkgs:
         let
           pkgs' = pkgs.extend llm-agents.overlays.shared-nixpkgs;
+          bundle = agentLib.mkBundle {
+            pkgs = pkgs';
+            inherit selection;
+          };
           configured = confix.lib.configure {
             pkgs = pkgs';
             configDir = ./nix/confix;
           };
         in
         import ./nix/devShells {
-          inherit confix entire-cli-nix configured;
+          inherit
+            agentLib
+            bundle
+            confix
+            entire-cli-nix
+            configured
+            localTargets
+            ;
           pkgs = pkgs';
         }
       );
 
-      checks = forEachSystem (pkgs: import ./nix/checks {
-        inherit pkgs self nixpkgs;
-      });
+      checks = forEachSystem (
+        pkgs:
+        import ./nix/checks {
+          inherit pkgs self nixpkgs;
+        }
+      );
     };
 }

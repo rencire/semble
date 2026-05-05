@@ -1,5 +1,26 @@
 {
   "nodes": {
+    "agent-skills": {
+      "inputs": {
+        "home-manager": "home-manager",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1777875835,
+        "narHash": "sha256-+ghBYIh477YxDPd0sKeD4AwnKJSOXKT0nHuAAGHL1cQ=",
+        "owner": "Kyure-A",
+        "repo": "agent-skills-nix",
+        "rev": "c6cb03f84cda0dc3f5daa05bf4d49f56c182f690",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Kyure-A",
+        "repo": "agent-skills-nix",
+        "type": "github"
+      }
+    },
     "blueprint": {
       "inputs": {
         "nixpkgs": [
@@ -70,11 +91,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1772761295,
-        "narHash": "sha256-yAxcym/B41Ab6ej9Krj64YU7MqGF+01ufPka4FtOjlU=",
+        "lastModified": 1772779170,
+        "narHash": "sha256-rqtDkwweW/qgYwGfUtFbyxmNaHaoiO+suUDAfJRDse0=",
         "owner": "rencire",
         "repo": "confix",
-        "rev": "a7c0700f5d603065a983da6c425213113d9fbfc4",
+        "rev": "65d0f3a978d79bb426e10f71777a9436dac3d783",
         "type": "github"
       },
       "original": {
@@ -142,6 +163,47 @@
         "type": "github"
       }
     },
+    "flakelight_2": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1777904098,
+        "narHash": "sha256-NMyKWHiiTOzUzbdWlYz3zTNnJLhExiEyAUOv2igpg/I=",
+        "owner": "accelbread",
+        "repo": "flakelight",
+        "rev": "d28eb3820853695194dbad8f1846639839bd3959",
+        "type": "github"
+      },
+      "original": {
+        "owner": "accelbread",
+        "repo": "flakelight",
+        "type": "github"
+      }
+    },
+    "home-manager": {
+      "inputs": {
+        "nixpkgs": [
+          "agent-skills",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1777852249,
+        "narHash": "sha256-XdbGWnFlX4McOEG5NioVsp35Ic6XL/rXnp8as71cu6o=",
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "rev": "c909892de502b4de9e92838a503c09a9c8ebe4aa",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "type": "github"
+      }
+    },
     "llm-agents": {
       "inputs": {
         "blueprint": "blueprint",
@@ -174,11 +236,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1772662098,
-        "narHash": "sha256-BKxBM4RNWP+5q0ZQ6v3JlJ0e6fFj/YoYNZ7/OpgabdU=",
+        "lastModified": 1777991014,
+        "narHash": "sha256-0DS24OW9d9iz+w0LCz6KpS2IpE2z2gHxeBdMZg9xpDY=",
         "owner": "BirdeeHub",
         "repo": "nix-wrapper-modules",
-        "rev": "2c0a3b795766b25d15ad1ec9eef3a06160154c9a",
+        "rev": "dc5184095ad488e937ec308b52c9c0b218959d8b",
         "type": "github"
       },
       "original": {
@@ -205,11 +267,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1772624091,
-        "narHash": "sha256-QKyJ0QGWBn6r0invrMAK8dmJoBYWoOWy7lN+UHzW1jc=",
+        "lastModified": 1777954456,
+        "narHash": "sha256-hGdgeU2Nk87RAuZyYjyDjFL6LK7dAZN5RE9+hrDTkDU=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "80bdc1e5ce51f56b19791b52b2901187931f5353",
+        "rev": "549bd84d6279f9852cae6225e372cc67fb91a4c1",
         "type": "github"
       },
       "original": {
@@ -219,13 +281,32 @@
         "type": "github"
       }
     },
+    "personal-skills": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1777952454,
+        "narHash": "sha256-jXxQY3hdju8950geiS0hRRJRAH4fiEY6/1T+mB+vIAI=",
+        "owner": "rencire",
+        "repo": "agent-skills",
+        "rev": "e4727a075471d0dcf55af05e230a8d2360ae31b2",
+        "type": "github"
+      },
+      "original": {
+        "owner": "rencire",
+        "repo": "agent-skills",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
+        "agent-skills": "agent-skills",
         "confix": "confix",
         "entire-cli-nix": "entire-cli-nix",
+        "flakelight": "flakelight_2",
         "llm-agents": "llm-agents",
         "nix-wrapper-modules": "nix-wrapper-modules",
-        "nixpkgs": "nixpkgs_2"
+        "nixpkgs": "nixpkgs_2",
+        "personal-skills": "personal-skills"
       }
     },
     "systems": {

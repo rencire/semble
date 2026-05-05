@@ -1,7 +1,7 @@
-# nix/confix/opencode.nix
+# .confix/opencode.nix
 { lib, pkgs, ... }:
 {
-  package = pkgs.opencode;
+  package = pkgs.llm-agents.opencode;
   settings = {
     "$schema" = "https://opencode.ai/config.json";
     mcp = {
@@ -15,6 +15,9 @@
           "--"
         ];
       };
+      # NOTE: This server still needs GITHUB_PERSONAL_ACCESS_TOKEN wired in
+      # at runtime later, ideally via sops-nix or another secret manager.
+      # Once the access token is set, make sure to set enabled = true.
       github = {
         type = "local";
         enabled = false;

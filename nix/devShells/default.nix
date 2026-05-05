@@ -1,4 +1,12 @@
-{ confix, entire-cli-nix, configured, pkgs }:
+{
+  agentLib,
+  bundle,
+  confix,
+  entire-cli-nix,
+  configured,
+  localTargets,
+  pkgs,
+}:
 {
   default = pkgs.mkShell {
     packages =
@@ -9,13 +17,20 @@
       ++ [
         entire-cli-nix.packages.${pkgs.system}.entire
         configured.opencode
+        pkgs.llm-agents.codex
+        pkgs.git
       ]
       ++ (with pkgs; [
         cargo
         clippy
-        git
         rustc
         rustfmt
       ]);
+
+    shellHook = agentLib.mkShellHook {
+      pkgs = pkgs;
+      inherit bundle;
+      targets = localTargets;
+    };
   };
 }
