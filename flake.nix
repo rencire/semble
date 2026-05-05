@@ -7,6 +7,14 @@
       url = "github:BirdeeHub/nix-wrapper-modules";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    llm-agents = {
+      url = "github:numtide/llm-agents.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    entire-cli-nix = {
+      url = "github:rencire/entire-cli-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     confix = {
       url = "github:rencire/confix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -18,6 +26,8 @@
     {
       self,
       nixpkgs,
+      llm-agents,
+      entire-cli-nix,
       confix,
       ...
     }:
@@ -61,7 +71,20 @@
         };
       });
 
-      devShells = forEachSystem (pkgs: import ./nix/devShells { inherit confix pkgs; });
+      devShells = forEachSystem (
+        pkgs:
+        let
+          pkgs' = pkgs.extend llm-agents.overlays.shared-nixpkgs;
+          configured = confix.lib.configure {
+            pkgs = pkgs';
+            configDir = ./nix/confix;
+          };
+        in
+        import ./nix/devShells {
+          inherit confix entire-cli-nix configured;
+          pkgs = pkgs';
+        }
+      );
 
       checks = forEachSystem (pkgs: import ./nix/checks {
         inherit pkgs self nixpkgs;

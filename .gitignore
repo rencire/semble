@@ -11,6 +11,11 @@
 *~
 .*.swp
 
+# Agent tools
+.aider
+.aider.*
+.aider*/
+
 # Local VCS
 .jj/
 
