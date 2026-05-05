@@ -24,8 +24,6 @@
 # Agent
 .agents/skills/
 .claude/skills/
-.codex/skills/
-.opencode/skills/
 
 # Never commit private keys
 *.key
