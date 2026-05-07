@@ -70,6 +70,15 @@ impl RepoPaths {
         self.root.join(&self.config.paths.host_template_dir)
     }
 
+    pub fn default_host_template_dir(&self) -> PathBuf {
+        self.host_template_dir()
+            .join(&self.config.paths.default_host_template)
+    }
+
+    pub fn named_host_template_dir(&self, template: &str) -> PathBuf {
+        self.host_template_dir().join(template)
+    }
+
     pub fn builder_policy(&self, name: &str) -> Option<&BuilderPolicyConfig> {
         self.config
             .builder_policies
@@ -284,6 +293,7 @@ mod tests {
 [paths]
 hosts_dir = "hosts"
 host_template_dir = "hosts/_template"
+default_host_template = "default"
 ssh_host_keys_dir = "ssh_host_keys"
 initrd_ssh_host_keys_dir = "initrd_ssh_host_keys"
 luks_root_keys_dir = "luks_root_keys"
@@ -387,6 +397,7 @@ network_secrets_file = "secrets/network.yaml"
 [paths]
 hosts_dir = "hosts"
 host_template_dir = "hosts/_template"
+default_host_template = "default"
 ssh_host_keys_dir = "ssh_host_keys"
 initrd_ssh_host_keys_dir = "initrd_ssh_host_keys"
 luks_root_keys_dir = "luks_root_keys"

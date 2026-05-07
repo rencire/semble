@@ -292,6 +292,7 @@ creation_rules:
     const SEMBLE_TOML: &str = r#"[paths]
 hosts_dir = "hosts"
 host_template_dir = "hosts/host.template"
+default_host_template = "default"
 ssh_host_keys_dir = "ssh_host_keys"
 initrd_ssh_host_keys_dir = "initrd_ssh_host_keys"
 luks_root_keys_dir = "luks_root_keys"

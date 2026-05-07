@@ -14,6 +14,7 @@ pub struct SembleConfig {
 pub struct PathsConfig {
     pub hosts_dir: PathBuf,
     pub host_template_dir: PathBuf,
+    pub default_host_template: String,
     pub ssh_host_keys_dir: PathBuf,
     pub initrd_ssh_host_keys_dir: PathBuf,
     pub luks_root_keys_dir: PathBuf,
@@ -69,6 +70,7 @@ mod tests {
             r#"[paths]
 hosts_dir = "hosts"
 host_template_dir = "hosts/_template"
+default_host_template = "default"
 ssh_host_keys_dir = "ssh_host_keys"
 initrd_ssh_host_keys_dir = "initrd_ssh_host_keys"
 luks_root_keys_dir = "luks_root_keys"

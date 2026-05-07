@@ -38,6 +38,7 @@ pub fn run(cli: Cli) -> Result<()> {
                 host::run_host_create(
                     &paths,
                     &args.hostname,
+                    args.template.as_deref(),
                     args.force,
                     args.skip_reencrypt,
                     args.sops_key_file.as_deref(),

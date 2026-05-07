@@ -222,12 +222,13 @@ pub fn run_host_key_delete(
 pub fn run_host_create(
     paths: &RepoPaths,
     hostname: &str,
+    template: Option<&str>,
     force: bool,
     skip_reencrypt: bool,
     sops_key_file: Option<&str>,
 ) -> Result<()> {
     assert_hostname_is_new(paths, hostname)?;
-    let dst_dir = copy_host_template(paths, hostname, force)?;
+    let dst_dir = copy_host_template(paths, hostname, template, force)?;
     ensure_facter_file(&dst_dir)?;
     let keys_dir = generate_ssh_host_keys(paths, hostname, force)?;
 
@@ -597,6 +598,7 @@ mod tests {
     const SEMBLE_TOML: &str = r#"[paths]
 hosts_dir = "hosts"
 host_template_dir = "hosts/_template"
+default_host_template = "default"
 ssh_host_keys_dir = "ssh_host_keys"
 initrd_ssh_host_keys_dir = "initrd_ssh_host_keys"
 luks_root_keys_dir = "luks_root_keys"

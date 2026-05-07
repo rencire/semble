@@ -4,7 +4,12 @@ use anyhow::Result;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub fn copy_host_template(paths: &RepoPaths, hostname: &str, force: bool) -> Result<PathBuf> {
+pub fn copy_host_template(
+    paths: &RepoPaths,
+    hostname: &str,
+    template: Option<&str>,
+    force: bool,
+) -> Result<PathBuf> {
     let dst_dir = paths.host_dir(hostname);
     if dst_dir.exists() {
         if !force {
@@ -16,7 +21,15 @@ pub fn copy_host_template(paths: &RepoPaths, hostname: &str, force: bool) -> Res
         fs::remove_dir_all(&dst_dir)?;
     }
 
-    copy_dir_recursive(&paths.host_template_dir(), &dst_dir)?;
+    let src_dir = match template {
+        Some(template) => paths.named_host_template_dir(template),
+        None => paths.default_host_template_dir(),
+    };
+    if !src_dir.exists() {
+        return fail(format!("host template does not exist: {}", src_dir.display()));
+    }
+
+    copy_dir_recursive(&src_dir, &dst_dir)?;
     update_template_contents(&dst_dir, hostname)?;
     Ok(dst_dir)
 }
@@ -79,4 +92,78 @@ fn set_recursive_permissions(path: &Path) -> Result<()> {
 #[cfg(not(unix))]
 fn set_recursive_permissions(_path: &Path) -> Result<()> {
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::copy_host_template;
+    use crate::repo::RepoPaths;
+    use std::fs;
+    use std::path::Path;
+    use tempfile::tempdir;
+
+    fn write_repo_config(root: &Path) {
+        fs::write(
+            root.join("semble.toml"),
+            r#"
+[paths]
+hosts_dir = "hosts"
+host_template_dir = "hosts/templates"
+default_host_template = "default"
+ssh_host_keys_dir = "ssh_host_keys"
+initrd_ssh_host_keys_dir = "initrd_ssh_host_keys"
+luks_root_keys_dir = "luks_root_keys"
+sops_config_file = ".sops.yaml"
+network_secrets_file = "secrets/network.yaml"
+"#,
+        )
+        .unwrap();
+    }
+
+    // Verify the default template root is used when no template name is provided.
+    #[test]
+    fn copies_default_template_when_template_is_omitted() {
+        let tempdir = tempdir().unwrap();
+        write_repo_config(tempdir.path());
+
+        let default_dir = tempdir.path().join("hosts/templates/default");
+        fs::create_dir_all(&default_dir).unwrap();
+        fs::write(default_dir.join("default.nix"), "host = TEMPLATE_HOSTNAME;\n").unwrap();
+
+        let paths = RepoPaths::new(tempdir.path()).unwrap();
+        let dst = copy_host_template(&paths, "atlas", None, false).unwrap();
+
+        assert_eq!(dst, tempdir.path().join("hosts/atlas"));
+        assert!(dst.join("default.nix").exists());
+        assert_eq!(fs::read_to_string(dst.join("default.nix")).unwrap(), "host = atlas;\n");
+    }
+
+    // Verify an explicit template name resolves under the configured template root.
+    #[test]
+    fn copies_named_template_when_requested() {
+        let tempdir = tempdir().unwrap();
+        write_repo_config(tempdir.path());
+
+        let named_dir = tempdir.path().join("hosts/templates/microvm");
+        fs::create_dir_all(&named_dir).unwrap();
+        fs::write(named_dir.join("default.nix"), "template = TEMPLATE_HOSTNAME;\n").unwrap();
+
+        let paths = RepoPaths::new(tempdir.path()).unwrap();
+        let dst = copy_host_template(&paths, "atlas", Some("microvm"), false).unwrap();
+
+        assert_eq!(fs::read_to_string(dst.join("default.nix")).unwrap(), "template = atlas;\n");
+    }
+
+    // Verify missing templates are rejected before any destination directory is created.
+    #[test]
+    fn rejects_missing_template_before_copying() {
+        let tempdir = tempdir().unwrap();
+        write_repo_config(tempdir.path());
+
+        let paths = RepoPaths::new(tempdir.path()).unwrap();
+        let error = copy_host_template(&paths, "atlas", Some("missing"), false).unwrap_err();
+
+        assert!(error.to_string().contains("host template does not exist"));
+        assert!(!tempdir.path().join("hosts/atlas").exists());
+    }
 }

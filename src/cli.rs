@@ -35,6 +35,8 @@ pub enum HostCommand {
 pub struct NamedHostArgs {
     pub hostname: String,
     #[arg(long)]
+    pub template: Option<String>,
+    #[arg(long)]
     pub force: bool,
     #[arg(long)]
     pub skip_reencrypt: bool,
@@ -207,6 +209,7 @@ mod tests {
     fn parses_local_host_commands() {
         let cases = [
             vec!["semble", "host", "create", "atlas"],
+            vec!["semble", "host", "create", "atlas", "--template", "microvm"],
             vec!["semble", "host", "delete", "atlas", "--yes"],
             vec!["semble", "host", "keys", "ssh", "add", "atlas", "--force"],
             vec!["semble", "host", "keys", "ssh", "delete", "atlas", "--yes"],
