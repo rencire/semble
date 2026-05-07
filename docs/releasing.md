@@ -14,12 +14,27 @@ Semble uses Conventional Commits and git tags to drive releases.
 
 Main should stay buildable, but it may include integration work when that work is intentionally part of the release train. Breaking changes are allowed when they are explicitly marked and intentionally released.
 
-## Version Sync
+The release process should keep versioned metadata in sync for whatever package
+or language ecosystem the repo uses.
 
-The release process must keep version declarations in sync across the repo, including:
+Examples:
 
-- `Cargo.toml`
-- `nix/packages/semble.nix`
+- Rust crates: `Cargo.toml`, lockfiles, and any Nix package version pins
+- JavaScript packages: `package.json`, lockfiles, and published package metadata
+- Python packages: `pyproject.toml`, `setup.cfg`, or wheel/sdist metadata
+- Go modules: `go.mod` and any release tags or generated module docs
+
+When a release needs explicit version metadata, prefer a dedicated release commit
+before the tag rather than bumping versions in every normal development commit.
+That keeps day-to-day commits focused on code changes while still making the
+released state explicit.
+
+```mermaid
+flowchart LR
+  A[Normal commits] --> B[Release commit\n(version metadata)]
+  B --> C[Tag the release]
+  C --> D[Published release]
+```
 
 ## Examples
 

@@ -12,12 +12,7 @@ This file tracks significant changes, architectural decisions, and "lessons lear
 - Keep follow-up doc-only commits narrow and explicit.
 
 ## Release Policy
-- Releases are cut from git tags.
-- Conventional Commits drive version bumps from merged commits since the last tag.
-- `feat` -> minor, `fix` -> patch, and breaking markers (`!` / `BREAKING CHANGE:`) -> major.
-- `docs`, `test`, `chore`, and `refactor` do not bump the release version.
-- No prereleases by default.
-- Keep version declarations in sync when bumping releases.
+- See [docs/releasing.md](docs/releasing.md)
 
 ## General Guidelines
 - Make the change easy, then make the easy change.
