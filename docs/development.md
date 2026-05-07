@@ -39,3 +39,7 @@ branch state separately before treating the change as fully published.
 - A non-zero `nix eval` exit must be treated as a real failure and surfaced with stderr.
 - Returning `None` for a failed `nix eval` is misleading because callers report that as missing image metadata.
 - If image prepare tests fail under one environment but pass in another, verify the actual `nix eval` stderr before assuming the flake metadata is absent.
+
+## Releasing
+
+See [docs/releasing.md](./releasing.md) for the versioning and release policy.
