@@ -36,9 +36,12 @@ Command behavior summary:
   forwards to the equivalent of `tianyi provision . -H <host> [extra args...]`
   - common option: `--builder-policy <name>`
   - physical-host passthrough: any trailing args after `--`, forwarded to
-    `nixos-anywhere`
+    `nixos-anywhere` as-is, including `--disk-encryption-keys` for full-disk
+    encryption secrets
   - MicroVM-only options: `--key-file`, `--install-ssh-host-keys`,
     `--system-store-path`, `--no-encrypt`, and `--force-reformat`
+  - `--key-file` is for Semble's MicroVM guest provisioning path, not for
+    `nixos-anywhere`
 - `semble host keys ssh add|delete <host>` manages repository SSH host keys
 - `semble host keys initrd-ssh add|delete <host>` manages initrd SSH host keys
 - `semble host keys luks add|delete <host>` manages encrypted-root unlock keys
@@ -50,7 +53,8 @@ Command behavior summary:
   on the parent host
   - typical usage:
   - `--parent <host>` is required
-  - `--key-file <path>` is required for encrypted provisioning
+  - `--key-file <path>` is required for encrypted provisioning and is staged
+    into the MicroVM guest workflow by Semble
   - encrypted provisioning uses the `cryptroot` mapper name by default
   - non-typical overrides:
   - `--system-store-path` skips the guest build step and uses an existing

@@ -122,9 +122,11 @@ pub struct HostProvisionArgs {
     #[arg(long)]
     pub builder_policy: Option<String>,
     /// Physical-host passthrough args forwarded to `tianyi provision` and then `nixos-anywhere`.
+    /// Use these for `nixos-anywhere` flags such as `--disk-encryption-keys`.
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub extra_args: Vec<OsString>,
     /// MicroVM-only: root unlock key staged for encrypted guest provisioning.
+    /// This is separate from `nixos-anywhere --disk-encryption-keys`.
     #[arg(long)]
     pub key_file: Option<String>,
     /// MicroVM-only: copy SSH host keys into the guest root.
@@ -263,7 +265,7 @@ mod tests {
                 "--builder-policy",
                 "l380y",
                 "--key-file",
-                "secrets/luks_root_keys/atlas.key",
+                "secrets/disk_keys/atlas/luks-root.key",
                 "--install-ssh-host-keys",
                 "ssh_host_keys/atlas",
                 "--system-store-path",
@@ -322,7 +324,7 @@ mod tests {
                 "--builder-policy",
                 "thor",
                 "--key-file",
-                "secrets/luks_root_keys/claw.key",
+                "secrets/disk_keys/claw/luks-root.key",
                 "--install-ssh-host-keys",
                 "ssh_host_keys/claw",
                 "--system-store-path",

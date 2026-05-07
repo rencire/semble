@@ -65,7 +65,7 @@ pub fn generate_initrd_ssh_host_keys(
 
 pub fn generate_luks_root_key(paths: &RepoPaths, hostname: &str, force: bool) -> Result<PathBuf> {
     let keys_dir = paths.luks_host_keys_dir(hostname);
-    let key_path = keys_dir.join("root.key");
+    let key_path = keys_dir.join("luks-root.key");
 
     if keys_dir.exists() {
         if !force {
@@ -119,7 +119,7 @@ host_template_dir = "hosts/_template"
 default_host_template = "default"
 ssh_host_keys_dir = "ssh_host_keys"
 initrd_ssh_host_keys_dir = "initrd_ssh_host_keys"
-luks_root_keys_dir = "luks_root_keys"
+disk_keys_dir = "disk_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"
 "#,
@@ -158,7 +158,7 @@ network_secrets_file = "secrets/network.yaml"
         let paths = RepoPaths::new(tempdir.path()).unwrap();
 
         let keys_dir = generate_luks_root_key(&paths, "atlas", true).unwrap();
-        let key_path = keys_dir.join("root.key");
+        let key_path = keys_dir.join("luks-root.key");
 
         assert!(key_path.exists());
         assert_eq!(fs::metadata(&key_path).unwrap().len(), 64);

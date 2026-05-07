@@ -129,7 +129,7 @@ provisioning path against the sibling `rensemble` repo:
 3. Confirm the parent directory and backing image both end up owned by
    `microvm:kvm`.
 4. Repeat the same provisioning flow with encryption enabled and a root unlock
-   key under `secrets/luks_root_keys/test-mvm`.
+    key under `secrets/disk_keys/test-mvm/luks-root.key`.
 
 ## Validation Results
 
@@ -138,7 +138,7 @@ The current implementation was exercised end to end in the sibling
 
 1. `nix flake update semble`
 2. `nix develop . -c semble host provision test-mvm --no-encrypt --builder-policy thor`
-3. `nix develop . -c semble host provision test-mvm --key-file secrets/luks_root_keys/test-mvm-root.key --builder-policy thor --force-reformat`
+ 3. `nix develop . -c semble host provision test-mvm --key-file secrets/disk_keys/test-mvm/luks-root.key --builder-policy thor --force-reformat`
 
 Those runs confirmed:
 
@@ -146,7 +146,7 @@ Those runs confirmed:
 - plain and encrypted MicroVM provisioning both complete successfully
 - the parent directory and backing image are owned by `microvm:kvm`
 - encrypted provisioning uses the expected root unlock key path under
-  `secrets/luks_root_keys/`
+  `secrets/disk_keys/`
 
 ## Open Questions
 

@@ -50,12 +50,12 @@ impl RepoPaths {
         self.initrd_ssh_keys_dir().join(hostname)
     }
 
-    pub fn luks_root_keys_dir(&self) -> PathBuf {
-        self.root.join(&self.config.paths.luks_root_keys_dir)
+    pub fn disk_keys_dir(&self) -> PathBuf {
+        self.root.join(&self.config.paths.disk_keys_dir)
     }
 
     pub fn luks_host_keys_dir(&self, hostname: &str) -> PathBuf {
-        self.luks_root_keys_dir().join(hostname)
+        self.disk_keys_dir().join(hostname)
     }
 
     pub fn sops_config_file(&self) -> PathBuf {
@@ -296,7 +296,7 @@ host_template_dir = "hosts/_template"
 default_host_template = "default"
 ssh_host_keys_dir = "ssh_host_keys"
 initrd_ssh_host_keys_dir = "initrd_ssh_host_keys"
-luks_root_keys_dir = "luks_root_keys"
+disk_keys_dir = "disk_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"
 "#,
@@ -400,7 +400,7 @@ host_template_dir = "hosts/_template"
 default_host_template = "default"
 ssh_host_keys_dir = "ssh_host_keys"
 initrd_ssh_host_keys_dir = "initrd_ssh_host_keys"
-luks_root_keys_dir = "luks_root_keys"
+disk_keys_dir = "disk_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"
 

@@ -601,7 +601,7 @@ host_template_dir = "hosts/_template"
 default_host_template = "default"
 ssh_host_keys_dir = "ssh_host_keys"
 initrd_ssh_host_keys_dir = "initrd_ssh_host_keys"
-luks_root_keys_dir = "luks_root_keys"
+disk_keys_dir = "disk_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"
 "#;
@@ -745,7 +745,7 @@ creation_rules:
 
         run_host_key_add(&paths, hostname, KeyKind::Luks, true).unwrap();
         let keys_dir = paths.luks_host_keys_dir(hostname);
-        assert!(keys_dir.join("root.key").exists());
+        assert!(keys_dir.join("luks-root.key").exists());
 
         run_host_key_delete(&paths, hostname, KeyKind::Luks, true).unwrap();
         assert!(!keys_dir.exists());

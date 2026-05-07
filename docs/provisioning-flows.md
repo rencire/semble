@@ -19,10 +19,14 @@ The ownership of those steps differs by workflow:
   provisioning, including the host-side activation/start step.
 
 For physical hosts, `host provision` forwards trailing passthrough arguments to
-`tianyi provision` and then to `nixos-anywhere`.
+`tianyi provision` and then to `nixos-anywhere`. Use `--disk-encryption-keys`
+there for encrypted disk setup; Semble does not interpret that flag itself.
 The MicroVM-only flags on `host provision` are `--key-file`,
 `--install-ssh-host-keys`, `--system-store-path`, `--no-encrypt`, and
 `--force-reformat`.
+
+`--key-file` is only for Semble's MicroVM provisioning path, where it stages the
+guest root unlock key before the image is installed.
 
 ## MicroVM Guest Provisioning
 

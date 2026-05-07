@@ -56,7 +56,7 @@ Expected per-host layout:
 
 - `ssh_host_keys/<host>/ssh_host_ed25519_key*`
 - `initrd_ssh_host_keys/<host>/ssh_host_ed25519_key*`
-- `luks_root_keys/<host>/root.key`
+- `disk_keys/<host>/luks-root.key`
 
 ## Behavior
 
