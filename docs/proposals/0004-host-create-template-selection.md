@@ -1,6 +1,6 @@
 # Proposal: Select host creation templates by name
 
-Status: `draft`
+Status: `accepted`
 
 ## Summary
 
