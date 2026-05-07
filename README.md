@@ -34,6 +34,11 @@ Command behavior summary:
   forwards to the equivalent of `tianyi os switch . -H <host> [extra args...]`
 - `semble host provision <host> [extra args...]`
   forwards to the equivalent of `tianyi provision . -H <host> [extra args...]`
+  - common option: `--builder-policy <name>`
+  - physical-host passthrough: any trailing args after `--`, forwarded to
+    `nixos-anywhere`
+  - MicroVM-only options: `--key-file`, `--install-ssh-host-keys`,
+    `--system-store-path`, `--no-encrypt`, and `--force-reformat`
 - `semble microvm provision <guest> --parent <parent>`
   resolves the guest's `microvm.volumes` configuration, creates or formats the
   root image on the parent host, copies the built system closure to the parent,

@@ -18,6 +18,12 @@ The ownership of those steps differs by workflow:
 - `semble microvm provision` should own steps 2, 3, 4, and 5 for MicroVM guest
   provisioning, including the host-side activation/start step.
 
+For physical hosts, `host provision` forwards trailing passthrough arguments to
+`tianyi provision` and then to `nixos-anywhere`.
+The MicroVM-only flags on `host provision` are `--key-file`,
+`--install-ssh-host-keys`, `--system-store-path`, `--no-encrypt`, and
+`--force-reformat`.
+
 ## MicroVM Guest Provisioning
 
 In the MicroVM case, the target is a guest image managed on the parent host.

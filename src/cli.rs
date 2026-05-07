@@ -77,20 +77,27 @@ pub struct DelegatedHostArgs {
 #[derive(Debug, Args)]
 pub struct HostProvisionArgs {
     pub hostname: String,
+    /// Optional builder policy used for the build/install invocation.
     #[arg(long)]
     pub builder_policy: Option<String>,
-    #[arg(long)]
-    pub key_file: Option<String>,
-    #[arg(long)]
-    pub install_ssh_host_keys: Option<String>,
-    #[arg(long)]
-    pub system_store_path: Option<String>,
-    #[arg(long)]
-    pub no_encrypt: bool,
-    #[arg(long)]
-    pub force_reformat: bool,
+    /// Physical-host passthrough args forwarded to `tianyi provision` and then `nixos-anywhere`.
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub extra_args: Vec<OsString>,
+    /// MicroVM-only: root unlock key staged for encrypted guest provisioning.
+    #[arg(long)]
+    pub key_file: Option<String>,
+    /// MicroVM-only: copy SSH host keys into the guest root.
+    #[arg(long)]
+    pub install_ssh_host_keys: Option<String>,
+    /// MicroVM-only: use an existing Nix store path instead of building.
+    #[arg(long)]
+    pub system_store_path: Option<String>,
+    /// MicroVM-only: create a plain ext4 root image instead of LUKS.
+    #[arg(long)]
+    pub no_encrypt: bool,
+    /// MicroVM-only: overwrite an existing guest image.
+    #[arg(long)]
+    pub force_reformat: bool,
 }
 
 #[derive(Debug, Args)]
