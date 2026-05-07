@@ -1,6 +1,9 @@
 use crate::confirm::require_delete_confirmation;
 use crate::error::fail;
-use crate::keys::{generate_ssh_host_keys, read_public_key_from_dir};
+use crate::keys::{
+    generate_initrd_ssh_host_keys, generate_luks_root_key, generate_ssh_host_keys,
+    read_public_key_from_dir,
+};
 use crate::repo::RepoPaths;
 use crate::sops::{
     network_rule_aliases, reencrypt_network_yaml, update_sops_yaml_add, update_sops_yaml_delete,
@@ -16,6 +19,31 @@ pub struct HostPresence {
     pub host_dir: bool,
     pub keys_dir: bool,
     pub sops: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyKind {
+    Ssh,
+    InitrdSsh,
+    Luks,
+}
+
+impl KeyKind {
+    fn label(self) -> &'static str {
+        match self {
+            KeyKind::Ssh => "SSH host keys",
+            KeyKind::InitrdSsh => "initrd SSH host keys",
+            KeyKind::Luks => "LUKS root keys",
+        }
+    }
+
+    fn dir(self, paths: &RepoPaths, hostname: &str) -> std::path::PathBuf {
+        match self {
+            KeyKind::Ssh => paths.host_keys_dir(hostname),
+            KeyKind::InitrdSsh => paths.initrd_host_keys_dir(hostname),
+            KeyKind::Luks => paths.luks_host_keys_dir(hostname),
+        }
+    }
 }
 
 pub fn validate_hostname(hostname: &str) -> Result<()> {
@@ -140,6 +168,55 @@ pub fn remove_host_files(paths: &RepoPaths, hostname: &str) -> Result<(bool, boo
         removed_keys = true;
     }
     Ok((removed_host, removed_keys))
+}
+
+pub fn run_host_key_add(
+    paths: &RepoPaths,
+    hostname: &str,
+    kind: KeyKind,
+    force: bool,
+) -> Result<()> {
+    match kind {
+        KeyKind::Ssh => {
+            let keys_dir = generate_ssh_host_keys(paths, hostname, force)?;
+            print_keys_summary(paths, &keys_dir, false, None);
+        }
+        KeyKind::InitrdSsh => {
+            let keys_dir = generate_initrd_ssh_host_keys(paths, hostname, force)?;
+            print_initrd_keys_summary(paths, &keys_dir);
+        }
+        KeyKind::Luks => {
+            let keys_dir = generate_luks_root_key(paths, hostname, force)?;
+            print_luks_keys_summary(paths, &keys_dir);
+        }
+    }
+    Ok(())
+}
+
+pub fn run_host_key_delete(
+    paths: &RepoPaths,
+    hostname: &str,
+    kind: KeyKind,
+    assume_yes: bool,
+) -> Result<()> {
+    let label = kind.label();
+    let dir = kind.dir(paths, hostname);
+    require_delete_confirmation(
+        hostname,
+        &format!("{label} delete"),
+        &[format!("delete {label} under {}", dir.display())],
+        assume_yes,
+    )?;
+    if dir.exists() {
+        fs::remove_dir_all(&dir)?;
+        println!("Deleted {label}: {} (yes)", relative_to_root(paths, &dir));
+    } else {
+        println!(
+            "Deleted {label}: {} (missing)",
+            relative_to_root(paths, &dir)
+        );
+    }
+    Ok(())
 }
 
 pub fn run_host_create(
@@ -331,13 +408,7 @@ fn print_create_summary(
 ) {
     print!(
         "{}",
-        create_summary_text(
-            paths,
-            dst_dir,
-            keys_dir,
-            reencrypted,
-            sops_key_path,
-        )
+        create_summary_text(paths, dst_dir, keys_dir, reencrypted, sops_key_path,)
     );
 }
 
@@ -396,7 +467,24 @@ fn print_keys_summary(
     reencrypted: bool,
     sops_key_path: Option<&Path>,
 ) {
-    print!("{}", keys_summary_text(paths, keys_dir, reencrypted, sops_key_path));
+    print!(
+        "{}",
+        keys_summary_text(paths, keys_dir, reencrypted, sops_key_path)
+    );
+}
+
+fn print_initrd_keys_summary(paths: &RepoPaths, keys_dir: &Path) {
+    println!(
+        "Created initrd SSH host keys: {}",
+        relative_to_root(paths, keys_dir)
+    );
+}
+
+fn print_luks_keys_summary(paths: &RepoPaths, keys_dir: &Path) {
+    println!(
+        "Created LUKS root key: {}",
+        relative_to_root(paths, keys_dir)
+    );
 }
 
 fn keys_summary_text(
@@ -497,9 +585,10 @@ fn yes_no(value: bool) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    use super::KeyKind;
     use super::{
         assert_hostname_exists_for_delete, assert_hostname_is_new, create_summary_text,
-        host_presence, keys_summary_text, validate_hostname,
+        host_presence, keys_summary_text, run_host_key_add, run_host_key_delete, validate_hostname,
     };
     use crate::repo::RepoPaths;
     use std::fs;
@@ -509,6 +598,8 @@ mod tests {
 hosts_dir = "hosts"
 host_template_dir = "hosts/_template"
 ssh_host_keys_dir = "ssh_host_keys"
+initrd_ssh_host_keys_dir = "initrd_ssh_host_keys"
+luks_root_keys_dir = "luks_root_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"
 "#;
@@ -550,7 +641,10 @@ creation_rules:
         fs::create_dir_all(paths.host_keys_dir(hostname)).unwrap();
         fs::write(
             paths.sops_config_file(),
-            format!("{SOPS_BASE}  - &{hostname} \"PUBLIC_KEY_{}\"\n", hostname.to_uppercase()),
+            format!(
+                "{SOPS_BASE}  - &{hostname} \"PUBLIC_KEY_{}\"\n",
+                hostname.to_uppercase()
+            ),
         )
         .unwrap();
 
@@ -626,5 +720,32 @@ creation_rules:
         assert!(!output.contains("Next steps:"));
         assert!(!output.contains("git add"));
         assert!(!output.contains("  1."));
+    }
+
+    #[test]
+    fn initrd_key_add_and_delete_use_repository_directories() {
+        let (_tempdir, paths) = setup_repo();
+        let hostname = "atlas";
+
+        run_host_key_add(&paths, hostname, KeyKind::InitrdSsh, true).unwrap();
+        let keys_dir = paths.initrd_host_keys_dir(hostname);
+        assert!(keys_dir.join("ssh_host_ed25519_key").exists());
+        assert!(keys_dir.join("ssh_host_ed25519_key.pub").exists());
+
+        run_host_key_delete(&paths, hostname, KeyKind::InitrdSsh, true).unwrap();
+        assert!(!keys_dir.exists());
+    }
+
+    #[test]
+    fn luks_key_add_and_delete_use_repository_directories() {
+        let (_tempdir, paths) = setup_repo();
+        let hostname = "atlas";
+
+        run_host_key_add(&paths, hostname, KeyKind::Luks, true).unwrap();
+        let keys_dir = paths.luks_host_keys_dir(hostname);
+        assert!(keys_dir.join("root.key").exists());
+
+        run_host_key_delete(&paths, hostname, KeyKind::Luks, true).unwrap();
+        assert!(!keys_dir.exists());
     }
 }

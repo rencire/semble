@@ -1,6 +1,6 @@
 # Proposal: Dispatch host lifecycle by declared host type
 
-Status: `in-progress`
+Status: `accepted`
 
 ## Summary
 

@@ -39,6 +39,9 @@ Command behavior summary:
     `nixos-anywhere`
   - MicroVM-only options: `--key-file`, `--install-ssh-host-keys`,
     `--system-store-path`, `--no-encrypt`, and `--force-reformat`
+- `semble host keys ssh add|delete <host>` manages repository SSH host keys
+- `semble host keys initrd-ssh add|delete <host>` manages initrd SSH host keys
+- `semble host keys luks add|delete <host>` manages encrypted-root unlock keys
 - `semble microvm provision <guest> --parent <parent>`
   resolves the guest's `microvm.volumes` configuration, creates or formats the
   root image on the parent host, copies the built system closure to the parent,

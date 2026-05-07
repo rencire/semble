@@ -41,6 +41,10 @@ Consumers define files in standard locations.
 Semble discovers those files, derives keys from their paths, validates their
 contents, and normalizes them into its internal composition model.
 
+Repo path roots are configured in `semble.toml`. The current path set includes
+host directories, SSH host key directories, initrd SSH host key directories,
+LUKS root key directories, and the SOPS-managed secret files.
+
 The consumer-facing file interface is Semble's primary API. Flake outputs are a
 compatibility layer built from that interface.
 

@@ -12,7 +12,10 @@ pub mod sops;
 pub mod template;
 
 use anyhow::Result;
-use cli::{Cli, Command, HostCommand, ImageCommand, MicrovmCommand};
+use cli::{
+    Cli, Command, HostCommand, ImageCommand, KeyActionCommand, KeysCommand, MicrovmCommand,
+    SshKeyActionCommand,
+};
 
 pub fn run(cli: Cli) -> Result<()> {
     match cli.command {
@@ -54,25 +57,12 @@ pub fn run(cli: Cli) -> Result<()> {
             HostCommand::Keys(args) => {
                 let paths = repo::RepoPaths::new(std::env::current_dir()?)?;
                 match args.command {
-                    cli::KeysCommand::Add(args) => {
-                        host::validate_hostname(&args.hostname)?;
-                        host::run_host_keys_add(
-                            &paths,
-                            &args.hostname,
-                            args.force,
-                            args.skip_reencrypt,
-                            args.sops_key_file.as_deref(),
-                        )
+                    KeysCommand::Ssh(args) => run_ssh_keys(&paths, args.command),
+                    KeysCommand::InitrdSsh(args) => {
+                        run_typed_keys(&paths, host::KeyKind::InitrdSsh, args.command)
                     }
-                    cli::KeysCommand::Delete(args) => {
-                        host::validate_hostname(&args.hostname)?;
-                        host::run_host_keys_delete(
-                            &paths,
-                            &args.hostname,
-                            args.yes,
-                            args.skip_reencrypt,
-                            args.sops_key_file.as_deref(),
-                        )
+                    KeysCommand::Luks(args) => {
+                        run_typed_keys(&paths, host::KeyKind::Luks, args.command)
                     }
                 }
             }
@@ -90,4 +80,50 @@ pub fn run(cli: Cli) -> Result<()> {
             }
         },
     }
+}
+
+fn run_ssh_keys(paths: &repo::RepoPaths, command: SshKeyActionCommand) -> Result<()> {
+    match command {
+        SshKeyActionCommand::Add(args) => run_validated_key_action(args.hostname, |hostname| {
+            host::run_host_keys_add(
+                paths,
+                hostname,
+                args.force,
+                args.skip_reencrypt,
+                args.sops_key_file.as_deref(),
+            )
+        }),
+        SshKeyActionCommand::Delete(args) => run_validated_key_action(args.hostname, |hostname| {
+            host::run_host_keys_delete(
+                paths,
+                hostname,
+                args.yes,
+                args.skip_reencrypt,
+                args.sops_key_file.as_deref(),
+            )
+        }),
+    }
+}
+
+fn run_typed_keys(
+    paths: &repo::RepoPaths,
+    kind: host::KeyKind,
+    command: KeyActionCommand,
+) -> Result<()> {
+    match command {
+        KeyActionCommand::Add(args) => run_validated_key_action(args.hostname, |hostname| {
+            host::run_host_key_add(paths, hostname, kind, args.force)
+        }),
+        KeyActionCommand::Delete(args) => run_validated_key_action(args.hostname, |hostname| {
+            host::run_host_key_delete(paths, hostname, kind, args.yes)
+        }),
+    }
+}
+
+fn run_validated_key_action<F>(hostname: String, action: F) -> Result<()>
+where
+    F: FnOnce(&str) -> Result<()>,
+{
+    host::validate_hostname(&hostname)?;
+    action(&hostname)
 }

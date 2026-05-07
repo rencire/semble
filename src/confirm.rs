@@ -18,7 +18,10 @@ pub fn require_delete_confirmation(
         ));
     }
 
-    print!("{}", delete_confirmation_text(hostname, command_name, impact_lines));
+    print!(
+        "{}",
+        delete_confirmation_text(hostname, command_name, impact_lines)
+    );
     print!("Type the hostname `{hostname}` to confirm: ");
     io::stdout().flush()?;
 

@@ -15,6 +15,8 @@ pub struct PathsConfig {
     pub hosts_dir: PathBuf,
     pub host_template_dir: PathBuf,
     pub ssh_host_keys_dir: PathBuf,
+    pub initrd_ssh_host_keys_dir: PathBuf,
+    pub luks_root_keys_dir: PathBuf,
     pub sops_config_file: PathBuf,
     pub network_secrets_file: PathBuf,
 }
@@ -54,11 +56,7 @@ mod tests {
     #[test]
     fn rejects_missing_required_fields() {
         let tempdir = tempdir().unwrap();
-        fs::write(
-            tempdir.path().join("semble.toml"),
-            "",
-        )
-        .unwrap();
+        fs::write(tempdir.path().join("semble.toml"), "").unwrap();
 
         assert!(SembleConfig::load(tempdir.path()).is_err());
     }
@@ -72,6 +70,8 @@ mod tests {
 hosts_dir = "hosts"
 host_template_dir = "hosts/_template"
 ssh_host_keys_dir = "ssh_host_keys"
+initrd_ssh_host_keys_dir = "initrd_ssh_host_keys"
+luks_root_keys_dir = "luks_root_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"
 "#,

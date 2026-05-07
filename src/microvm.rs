@@ -656,6 +656,8 @@ mod tests {
 hosts_dir = "hosts"
 host_template_dir = "hosts/_template"
 ssh_host_keys_dir = "ssh_host_keys"
+initrd_ssh_host_keys_dir = "initrd_ssh_host_keys"
+luks_root_keys_dir = "luks_root_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"
 "#,

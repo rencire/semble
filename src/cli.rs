@@ -61,8 +61,47 @@ pub struct KeysArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum KeysCommand {
+    Ssh(SshKeysArgs),
+    InitrdSsh(KeyTypeArgs),
+    Luks(KeyTypeArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct SshKeysArgs {
+    #[command(subcommand)]
+    pub command: SshKeyActionCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SshKeyActionCommand {
     Add(NamedHostArgs),
     Delete(DeleteHostArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct KeyTypeArgs {
+    #[command(subcommand)]
+    pub command: KeyActionCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum KeyActionCommand {
+    Add(TypedKeyAddArgs),
+    Delete(TypedKeyDeleteArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct TypedKeyAddArgs {
+    pub hostname: String,
+    #[arg(long)]
+    pub force: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct TypedKeyDeleteArgs {
+    pub hostname: String,
+    #[arg(long, short = 'y')]
+    pub yes: bool,
 }
 
 #[derive(Debug, Args)]
@@ -169,8 +208,28 @@ mod tests {
         let cases = [
             vec!["semble", "host", "create", "atlas"],
             vec!["semble", "host", "delete", "atlas", "--yes"],
-            vec!["semble", "host", "keys", "add", "atlas", "--force"],
-            vec!["semble", "host", "keys", "delete", "atlas", "--yes"],
+            vec!["semble", "host", "keys", "ssh", "add", "atlas", "--force"],
+            vec!["semble", "host", "keys", "ssh", "delete", "atlas", "--yes"],
+            vec![
+                "semble",
+                "host",
+                "keys",
+                "initrd-ssh",
+                "add",
+                "atlas",
+                "--force",
+            ],
+            vec![
+                "semble",
+                "host",
+                "keys",
+                "initrd-ssh",
+                "delete",
+                "atlas",
+                "--yes",
+            ],
+            vec!["semble", "host", "keys", "luks", "add", "atlas", "--force"],
+            vec!["semble", "host", "keys", "luks", "delete", "atlas", "--yes"],
         ];
 
         for args in cases {

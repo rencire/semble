@@ -21,7 +21,12 @@ pub fn run_image_prepare(paths: &RepoPaths, args: PrepareImageArgs) -> Result<()
     normalize_artifact_to_raw(&artifact, &raw_img)?;
 
     if let Some(keys_dir) = &config.keys_dir {
-        inject_host_keys(&raw_img, keys_dir, &config.partition_label, &config.output_path)?;
+        inject_host_keys(
+            &raw_img,
+            keys_dir,
+            &config.partition_label,
+            &config.output_path,
+        )?;
     } else {
         if let Some(parent) = config.output_path.parent() {
             fs::create_dir_all(parent)?;
@@ -32,7 +37,10 @@ pub fn run_image_prepare(paths: &RepoPaths, args: PrepareImageArgs) -> Result<()
                 fs::remove_file(&raw_img)
             })
             .with_context(|| format!("failed to write {}", config.output_path.display()))?;
-        println!("Skipping SSH key injection. Image written to: {}", config.output_path.display());
+        println!(
+            "Skipping SSH key injection. Image written to: {}",
+            config.output_path.display()
+        );
     }
 
     if let Some(device) = &config.device {
@@ -53,8 +61,13 @@ struct PreparedImageConfig {
     raw_img_name: String,
 }
 
-fn resolve_prepare_config(paths: &RepoPaths, args: PrepareImageArgs) -> Result<PreparedImageConfig> {
-    resolve_prepare_config_with(paths, args, |paths, image_name| load_image_prepare_config(paths, image_name))
+fn resolve_prepare_config(
+    paths: &RepoPaths,
+    args: PrepareImageArgs,
+) -> Result<PreparedImageConfig> {
+    resolve_prepare_config_with(paths, args, |paths, image_name| {
+        load_image_prepare_config(paths, image_name)
+    })
 }
 
 fn resolve_prepare_config_with(
@@ -135,7 +148,10 @@ fn build_image(root: &Path, attr: &str) -> Result<()> {
 
     println!("Building image attr: {attr}");
     run_command(
-        Command::new("nix").arg("build").arg(&full_attr).current_dir(root),
+        Command::new("nix")
+            .arg("build")
+            .arg(&full_attr)
+            .current_dir(root),
         &format!("failed to build {full_attr}"),
     )
 }
@@ -149,7 +165,10 @@ fn find_built_artifact(result_path: &Path) -> Result<PathBuf> {
     collect_artifacts(result_path, &mut candidates)?;
 
     for suffix in [".img.zst", ".img.xz", ".img", ".raw"] {
-        if let Some(path) = candidates.iter().find(|path| path.to_string_lossy().ends_with(suffix)) {
+        if let Some(path) = candidates
+            .iter()
+            .find(|path| path.to_string_lossy().ends_with(suffix))
+        {
             return Ok(path.clone());
         }
     }
@@ -197,7 +216,12 @@ fn normalize_artifact_to_raw(artifact: &Path, raw_img: &Path) -> Result<()> {
     }
 }
 
-fn inject_host_keys(raw_img: &Path, keys_dir: &Path, partition_label: &str, output_path: &Path) -> Result<()> {
+fn inject_host_keys(
+    raw_img: &Path,
+    keys_dir: &Path,
+    partition_label: &str,
+    output_path: &Path,
+) -> Result<()> {
     let ssh_dir_rel = Path::new("etc/ssh");
     let loopdev = run_command_capture(
         Command::new("sudo")
@@ -328,7 +352,10 @@ fn flash_image(image: &Path, device: &Path) -> Result<()> {
     Command::new("sudo")
         .arg("sh")
         .arg("-c")
-        .arg(format!("umount {}* 2>/dev/null || true", shell_escape(device)))
+        .arg(format!(
+            "umount {}* 2>/dev/null || true",
+            shell_escape(device)
+        ))
         .status()
         .ok();
 
@@ -417,7 +444,10 @@ impl Drop for LoopCleanup {
 
 #[cfg(test)]
 mod tests {
-    use super::{find_built_artifact, resolve_prepare_config, resolve_prepare_config_with, validate_prepare_inputs};
+    use super::{
+        find_built_artifact, resolve_prepare_config, resolve_prepare_config_with,
+        validate_prepare_inputs,
+    };
     use crate::cli::PrepareImageArgs;
     use crate::repo::{ImagePrepareConfig, RepoPaths};
     use anyhow::anyhow;
@@ -432,6 +462,8 @@ mod tests {
 hosts_dir = "hosts"
 host_template_dir = "hosts/_template"
 ssh_host_keys_dir = "ssh_host_keys"
+initrd_ssh_host_keys_dir = "initrd_ssh_host_keys"
+luks_root_keys_dir = "luks_root_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"
 "#,
@@ -471,7 +503,10 @@ network_secrets_file = "secrets/network.yaml"
             config.keys_dir.unwrap(),
             tempdir.path().join("ssh_host_keys").join("vishnu")
         );
-        assert_eq!(config.output_path, tempdir.path().join("out").join("vishnu.img"));
+        assert_eq!(
+            config.output_path,
+            tempdir.path().join("out").join("vishnu.img")
+        );
     }
 
     #[test]
@@ -524,7 +559,10 @@ network_secrets_file = "secrets/network.yaml"
         .unwrap();
 
         assert!(config.keys_dir.is_none());
-        assert_eq!(config.output_path, std::path::PathBuf::from("/tmp/custom.img"));
+        assert_eq!(
+            config.output_path,
+            std::path::PathBuf::from("/tmp/custom.img")
+        );
     }
 
     #[test]

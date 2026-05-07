@@ -293,6 +293,8 @@ creation_rules:
 hosts_dir = "hosts"
 host_template_dir = "hosts/host.template"
 ssh_host_keys_dir = "ssh_host_keys"
+initrd_ssh_host_keys_dir = "initrd_ssh_host_keys"
+luks_root_keys_dir = "luks_root_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"
 "#;
@@ -336,8 +338,7 @@ network_secrets_file = "secrets/network.yaml"
     #[test]
     fn updates_sops_yaml_add_and_delete() {
         let (_tempdir, paths) = setup_repo();
-        let changed =
-            update_sops_yaml_add(&paths, "atlas", "PUBLIC_KEY_ATLAS").unwrap();
+        let changed = update_sops_yaml_add(&paths, "atlas", "PUBLIC_KEY_ATLAS").unwrap();
         assert!(changed);
         let contents = fs::read_to_string(paths.sops_config_file()).unwrap();
         assert!(contents.contains("&atlas \"PUBLIC_KEY_ATLAS\""));
@@ -369,7 +370,9 @@ network_secrets_file = "secrets/network.yaml"
         )
         .unwrap();
         fs::write(
-            paths.host_keys_dir("alpha").join("ssh_host_ed25519_key.pub"),
+            paths
+                .host_keys_dir("alpha")
+                .join("ssh_host_ed25519_key.pub"),
             "PUBLIC_KEY_ALPHA\n",
         )
         .unwrap();
