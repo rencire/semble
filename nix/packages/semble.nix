@@ -9,7 +9,7 @@
 
 rustPlatform.buildRustPackage {
   pname = "semble";
-  version = "0.4.2";
+  version = "0.4.3";
 
   src = lib.cleanSource ../..;
   cargoLock = {
@@ -22,6 +22,7 @@ rustPlatform.buildRustPackage {
   nativeBuildInputs = [
     makeWrapper
     nix
+    openssh
   ];
 
   postInstall = ''

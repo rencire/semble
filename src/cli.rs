@@ -115,6 +115,7 @@ pub struct DelegatedHostArgs {
 }
 
 #[derive(Debug, Args)]
+#[command(after_help = "Examples:\n  semble host provision my-vm --key-file ./secrets/my-vm-root.key\n  semble host provision thor --target-host genesis-nixos -- --disk-encryption-keys ./secrets/thor/luks-root.key /tmp/luks-root.key")]
 pub struct HostProvisionArgs {
     pub hostname: String,
     /// Optional builder policy used for the build/install invocation.
