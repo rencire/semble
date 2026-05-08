@@ -115,7 +115,7 @@ pub struct DelegatedHostArgs {
 }
 
 #[derive(Debug, Args)]
-#[command(after_help = "Examples:\n  semble host provision my-vm --disk-encryption-keys ./secrets/my-vm-root.key\n  semble host provision thor --target-host genesis-nixos --disk-encryption-keys ./secrets/thor/luks-root.key /tmp/luks-root.key")]
+#[command(after_help = "Examples:\n  semble host provision my-vm --disk-encryption-keys ./secrets/my-vm-root.key\n  semble host provision thor --target-host genesis-nixos --disk-encryption-keys ./secrets/thor/luks-root.key /tmp/luks-root.key\n\nPhysical-host passthrough options (after hostname):\n  --target-host <ssh>  --disk-encryption-keys <remote> <local>  --host-keys-dir <dir>\n  --generate-hardware-config <backend> <path>  --disko-mode <mode>\n  --phases <list>  --build-on <auto|local|remote>")]
 pub struct HostProvisionArgs {
     pub hostname: String,
     /// Optional builder policy used for the build/install invocation.
@@ -125,12 +125,10 @@ pub struct HostProvisionArgs {
     /// Use these for `nixos-anywhere` flags such as `--disk-encryption-keys`.
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub extra_args: Vec<OsString>,
-    /// MicroVM-only: root unlock key staged for encrypted guest provisioning.
-    /// For physical hosts, use `--disk-encryption-keys` after the hostname (forwarded to nixos-anywhere).
+    /// Root unlock key for encrypted provisioning (MicroVM: Semble flag; physical: forwarded to nixos-anywhere).
     #[arg(long)]
     pub disk_encryption_keys: Option<String>,
-    /// MicroVM-only: copy SSH host keys into the guest root.
-    /// For physical hosts, use `--host-keys-dir` after the hostname (forwarded to tianyi).
+    /// SSH host keys directory (MicroVM: Semble flag; physical: forwarded to tianyi via --host-keys-dir).
     #[arg(long)]
     pub host_keys_dir: Option<String>,
     /// MicroVM-only: use an existing Nix store path instead of building.

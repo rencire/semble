@@ -38,10 +38,9 @@ Command behavior summary:
   - physical-host passthrough: any trailing args after `--`, forwarded to
     `nixos-anywhere` as-is, including `--disk-encryption-keys` for full-disk
     encryption secrets
-  - MicroVM-only options: `--disk-encryption-keys`, `--host-keys-dir`,
-    `--system-store-path`, `--no-encrypt`, and `--force-reformat`
-  - `--disk-encryption-keys` is for Semble's MicroVM guest provisioning path, not for
-    `nixos-anywhere`
+  - options for both: `--disk-encryption-keys`, `--host-keys-dir`
+    (MicroVM: Semble flags; physical: passthrough to nixos-anywhere)
+  - MicroVM-only options: `--system-store-path`, `--no-encrypt`, and `--force-reformat`
 - `semble host keys ssh add|delete <host>` manages repository SSH host keys
 - `semble host keys initrd-ssh add|delete <host>` manages initrd SSH host keys
 - `semble host keys luks add|delete <host>` manages encrypted-root unlock keys
@@ -51,10 +50,11 @@ Command behavior summary:
   installs into the mounted root, optionally copies SSH host keys into
   `/etc/ssh/`, validates the installed guest system, and restarts the MicroVM
   on the parent host
-  - MicroVM-only options: `--disk-encryption-keys`, `--host-keys-dir`,
-    `--system-store-path`, `--no-encrypt`, and `--force-reformat`
-  - `--disk-encryption-keys` is required for encrypted provisioning and is staged into the
-    MicroVM guest workflow by Semble
+  - options for both: `--disk-encryption-keys`, `--host-keys-dir`
+    (MicroVM: Semble flags; physical: passthrough to nixos-anywhere)
+  - MicroVM-only options: `--system-store-path`, `--no-encrypt`, and `--force-reformat`
+  - `--disk-encryption-keys` is required for encrypted MicroVM provisioning;
+    for physical hosts, pass it after the hostname to forward to nixos-anywhere
   - encrypted provisioning uses the `cryptroot` mapper name by default
 
 Remote target note:
