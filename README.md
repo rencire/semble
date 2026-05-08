@@ -24,7 +24,7 @@ semble host switch my-host --target-host my-host-deploy --builder-policy buildbo
 # install or reinstall NixOS on a remote target host
 semble host provision my-host --target-host my-host-deploy
 # provision a MicroVM guest image and bring it online through its parent host
-semble microvm provision my-vm --parent my-host --key-file ./secrets/my-vm-root.key
+semble host provision my-vm --key-file ./secrets/my-vm-root.key
 ```
 
 Command behavior summary:
@@ -45,27 +45,17 @@ Command behavior summary:
 - `semble host keys ssh add|delete <host>` manages repository SSH host keys
 - `semble host keys initrd-ssh add|delete <host>` manages initrd SSH host keys
 - `semble host keys luks add|delete <host>` manages encrypted-root unlock keys
-- `semble microvm provision <guest> --parent <parent>`
+- `semble host provision <host> [extra args...]`
   resolves the guest's `microvm.volumes` configuration, creates or formats the
   root image on the parent host, copies the built system closure to the parent,
   installs into the mounted root, optionally copies SSH host keys into
   `/etc/ssh/`, validates the installed guest system, and restarts the MicroVM
   on the parent host
-  - typical usage:
-  - `--parent <host>` is required
-  - `--key-file <path>` is required for encrypted provisioning and is staged
-    into the MicroVM guest workflow by Semble
+  - MicroVM-only options: `--key-file`, `--install-ssh-host-keys`,
+    `--system-store-path`, `--no-encrypt`, and `--force-reformat`
+  - `--key-file` is required for encrypted provisioning and is staged into the
+    MicroVM guest workflow by Semble
   - encrypted provisioning uses the `cryptroot` mapper name by default
-  - non-typical overrides:
-  - `--system-store-path` skips the guest build step and uses an existing
-    Nix store path
-  - `--no-encrypt` creates a plain ext4 root image instead of a LUKS container
-  - `--install-ssh-host-keys <dir>` copies `ssh_host_ed25519_key*` from a
-    custom directory into the guest root
-  - `--builder-policy <name>` builds the guest through a strict single-
-    machine policy from `semble.toml`
-  - `--force-reformat` only when you intentionally want to overwrite an
-    existing image
 
 Remote target note:
 - `host switch` does not currently infer a remote deploy alias on its own

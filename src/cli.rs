@@ -12,7 +12,6 @@ pub struct Cli {
 pub enum Command {
     Host(HostArgs),
     Image(ImageArgs),
-    Microvm(MicrovmArgs),
 }
 
 #[derive(Debug, Args)]
@@ -143,6 +142,18 @@ pub struct HostProvisionArgs {
     pub force_reformat: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct ProvisionArgs {
+    pub guest: String,
+    pub parent: String,
+    pub builder_policy: Option<String>,
+    pub key_file: Option<String>,
+    pub install_ssh_host_keys: Option<String>,
+    pub system_store_path: Option<String>,
+    pub no_encrypt: bool,
+    pub force_reformat: bool,
+}
+
 #[derive(Debug, Args)]
 pub struct ImageArgs {
     #[command(subcommand)]
@@ -165,36 +176,6 @@ pub struct PrepareImageArgs {
     pub device: Option<String>,
     #[arg(long)]
     pub skip_inject: bool,
-}
-
-#[derive(Debug, Args)]
-pub struct MicrovmArgs {
-    #[command(subcommand)]
-    pub command: MicrovmCommand,
-}
-
-#[derive(Debug, Subcommand)]
-pub enum MicrovmCommand {
-    Provision(ProvisionArgs),
-}
-
-#[derive(Debug, Args)]
-pub struct ProvisionArgs {
-    pub guest: String,
-    #[arg(long)]
-    pub parent: String,
-    #[arg(long)]
-    pub builder_policy: Option<String>,
-    #[arg(long)]
-    pub key_file: Option<String>,
-    #[arg(long)]
-    pub install_ssh_host_keys: Option<String>,
-    #[arg(long)]
-    pub system_store_path: Option<String>,
-    #[arg(long)]
-    pub no_encrypt: bool,
-    #[arg(long)]
-    pub force_reformat: bool,
 }
 
 #[cfg(test)]
@@ -310,33 +291,4 @@ mod tests {
         }
     }
 
-    #[test]
-    fn parses_microvm_commands() {
-        let cases = [
-            vec!["semble", "microvm", "provision", "claw", "--parent", "thor"],
-            vec![
-                "semble",
-                "microvm",
-                "provision",
-                "claw",
-                "--parent",
-                "thor",
-                "--builder-policy",
-                "thor",
-                "--key-file",
-                "secrets/disk_keys/claw/luks-root.key",
-                "--install-ssh-host-keys",
-                "ssh_host_keys/claw",
-                "--system-store-path",
-                "/nix/store/test-system",
-                "--no-encrypt",
-                "--force-reformat",
-            ],
-        ];
-
-        for args in cases {
-            let result = Cli::try_parse_from(args);
-            assert!(result.is_ok(), "failed to parse microvm command");
-        }
-    }
 }

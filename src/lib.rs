@@ -13,8 +13,7 @@ pub mod template;
 
 use anyhow::Result;
 use cli::{
-    Cli, Command, HostCommand, ImageCommand, KeyActionCommand, KeysCommand, MicrovmCommand,
-    SshKeyActionCommand,
+    Cli, Command, HostCommand, ImageCommand, KeyActionCommand, KeysCommand, SshKeyActionCommand,
 };
 
 pub fn run(cli: Cli) -> Result<()> {
@@ -72,12 +71,6 @@ pub fn run(cli: Cli) -> Result<()> {
             ImageCommand::Prepare(args) => {
                 let paths = repo::RepoPaths::new(std::env::current_dir()?)?;
                 image::run_image_prepare(&paths, args)
-            }
-        },
-        Command::Microvm(microvm) => match microvm.command {
-            MicrovmCommand::Provision(args) => {
-                let paths = repo::RepoPaths::new(std::env::current_dir()?)?;
-                microvm::run_microvm_provision(&paths, args)
             }
         },
     }

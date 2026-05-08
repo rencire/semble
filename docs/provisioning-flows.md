@@ -15,7 +15,7 @@ The ownership of those steps differs by workflow:
 
 - `semble host provision` owns steps 2, 3, 4, and 5 for physical-host
   installation.
-- `semble microvm provision` should own steps 2, 3, 4, and 5 for MicroVM guest
+- `semble host provision` should own steps 2, 3, 4, and 5 for MicroVM guest
   provisioning, including the host-side activation/start step.
 
 For physical hosts, `host provision` forwards trailing passthrough arguments to
