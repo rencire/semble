@@ -115,7 +115,7 @@ pub struct DelegatedHostArgs {
 }
 
 #[derive(Debug, Args)]
-#[command(after_help = "Examples:\n  semble host provision my-vm --disk-encryption-keys ./secrets/my-vm-root.key\n  semble host provision thor --target-host genesis-nixos --disk-encryption-keys ./secrets/thor/luks-root.key /tmp/luks-root.key\n\nPhysical-host passthrough options (after hostname):\n  --target-host <ssh>  --disk-encryption-keys <remote> <local>  --host-keys-dir <dir>\n  --generate-hardware-config <backend> <path>  --disko-mode <mode>\n  --phases <list>  --build-on <auto|local|remote>")]
+#[command(after_help = "Examples:\n  semble host provision my-vm --disk-encryption-keys ./secrets/my-vm-root.key\n  semble host provision thor --target-host genesis-nixos --disk-encryption-keys ./secrets/thor/luks-root.key /tmp/luks-root.key\n\nPhysical-host passthrough options (after hostname):\n  --target-host <ssh>\n  --disk-encryption-keys <remote> <local>\n  --host-keys-dir <dir>\n  --generate-hardware-config <backend> <path>\n  --disko-mode <mode>\n  --phases <list>\n  --build-on <auto|local|remote>")]
 pub struct HostProvisionArgs {
     pub hostname: String,
     /// Optional builder policy used for the build/install invocation.
