@@ -115,7 +115,7 @@ pub struct DelegatedHostArgs {
 }
 
 #[derive(Debug, Args)]
-#[command(after_help = "Examples:\n  semble host provision my-vm --key-file ./secrets/my-vm-root.key\n  semble host provision thor --target-host genesis-nixos -- --disk-encryption-keys ./secrets/thor/luks-root.key /tmp/luks-root.key")]
+#[command(after_help = "Examples:\n  semble host provision my-vm --disk-encryption-keys ./secrets/my-vm-root.key\n  semble host provision thor --target-host genesis-nixos --disk-encryption-keys ./secrets/thor/luks-root.key /tmp/luks-root.key")]
 pub struct HostProvisionArgs {
     pub hostname: String,
     /// Optional builder policy used for the build/install invocation.
@@ -126,12 +126,13 @@ pub struct HostProvisionArgs {
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub extra_args: Vec<OsString>,
     /// MicroVM-only: root unlock key staged for encrypted guest provisioning.
-    /// This is separate from `nixos-anywhere --disk-encryption-keys`.
+    /// For physical hosts, use `--disk-encryption-keys` after the hostname (forwarded to nixos-anywhere).
     #[arg(long)]
-    pub key_file: Option<String>,
+    pub disk_encryption_keys: Option<String>,
     /// MicroVM-only: copy SSH host keys into the guest root.
+    /// For physical hosts, use `--host-keys-dir` after the hostname (forwarded to tianyi).
     #[arg(long)]
-    pub install_ssh_host_keys: Option<String>,
+    pub host_keys_dir: Option<String>,
     /// MicroVM-only: use an existing Nix store path instead of building.
     #[arg(long)]
     pub system_store_path: Option<String>,
@@ -148,8 +149,8 @@ pub struct ProvisionArgs {
     pub guest: String,
     pub parent: String,
     pub builder_policy: Option<String>,
-    pub key_file: Option<String>,
-    pub install_ssh_host_keys: Option<String>,
+    pub disk_encryption_keys: Option<String>,
+    pub host_keys_dir: Option<String>,
     pub system_store_path: Option<String>,
     pub no_encrypt: bool,
     pub force_reformat: bool,

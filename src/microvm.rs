@@ -42,18 +42,18 @@ pub fn run_microvm_provision(paths: &RepoPaths, args: ProvisionArgs) -> Result<(
     require_cmd("nix")?;
 
     let encrypt_root = !args.no_encrypt;
-    let key_file = args.key_file.map(PathBuf::from);
+    let disk_encryption_keys = args.disk_encryption_keys.map(PathBuf::from);
     if encrypt_root {
-        let Some(key_file) = key_file.as_ref() else {
-            return fail("--key-file is required unless --no-encrypt is set");
+        let Some(disk_encryption_keys) = disk_encryption_keys.as_ref() else {
+            return fail("--disk-encryption-keys is required unless --no-encrypt is set");
         };
-        if !key_file.is_file() {
-            return fail(format!("Key file not found: {}", key_file.display()));
+        if !disk_encryption_keys.is_file() {
+            return fail(format!("Key file not found: {}", disk_encryption_keys.display()));
         }
     }
 
-    let install_ssh_host_keys = args.install_ssh_host_keys.map(PathBuf::from);
-    if let Some(keys_dir) = install_ssh_host_keys.as_ref() {
+    let host_keys_dir = args.host_keys_dir.map(PathBuf::from);
+    if let Some(keys_dir) = host_keys_dir.as_ref() {
         validate_ssh_host_keys_dir(keys_dir)?;
     }
 
@@ -109,7 +109,7 @@ pub fn run_microvm_provision(paths: &RepoPaths, args: ProvisionArgs) -> Result<(
     let image_size = format!("{}M", volume.size);
     if encrypt_root {
         println!("Copying root unlock key to parent host...");
-        upload_file(&key_file.unwrap(), &args.parent, &remote_key_path)?;
+        upload_file(&disk_encryption_keys.unwrap(), &args.parent, &remote_key_path)?;
         run_remote(
             &args.parent,
             &format!("chmod 600 {}", shell_quote(&remote_key_path)),
@@ -214,7 +214,7 @@ pub fn run_microvm_provision(paths: &RepoPaths, args: ProvisionArgs) -> Result<(
         ),
     )?;
 
-    if let Some(keys_dir) = install_ssh_host_keys.as_ref() {
+    if let Some(keys_dir) = host_keys_dir.as_ref() {
         println!("Copying SSH host keys into guest root...");
         upload_file(
             &keys_dir.join("ssh_host_ed25519_key"),
@@ -263,7 +263,7 @@ pub fn run_microvm_provision(paths: &RepoPaths, args: ProvisionArgs) -> Result<(
         &args.parent,
         &format!("sudo test -e {}/etc/NIXOS", shell_quote(&mount_point)),
     )?;
-    if install_ssh_host_keys.is_some() {
+    if host_keys_dir.is_some() {
         run_remote(
             &args.parent,
             &format!(

@@ -21,12 +21,85 @@ The ownership of those steps differs by workflow:
 For physical hosts, `host provision` forwards trailing passthrough arguments to
 `tianyi provision` and then to `nixos-anywhere`. Use `--disk-encryption-keys`
 there for encrypted disk setup; Semble does not interpret that flag itself.
-The MicroVM-only flags on `host provision` are `--key-file`,
-`--install-ssh-host-keys`, `--system-store-path`, `--no-encrypt`, and
+The MicroVM-only flags on `host provision` are `--disk-encryption-keys`,
+`--host-keys-dir`, `--system-store-path`, `--no-encrypt`, and
 `--force-reformat`.
 
-`--key-file` is only for Semble's MicroVM provisioning path, where it stages the
-guest root unlock key before the image is installed.
+`--disk-encryption-keys` is only for Semble's MicroVM provisioning path, where it
+stages the guest root unlock key before the image is installed.
+
+## Practical Examples
+
+### Physical Host Provision
+
+All flags after the hostname are forwarded to `tianyi provision`, which then calls
+`nixos-anywhere`. No `--` separator is needed.
+
+**Basic provision:**
+
+```bash
+semble host provision my-host --target-host my-host-deploy
+```
+
+**With disk encryption and hardware config:**
+
+```bash
+semble host provision my-host \
+  --target-host my-host-deploy \
+  --disk-encryption-keys /tmp/luks-key /path/to/key \
+  --generate-hardware-config nixos-facter ./hosts/my-host/facter.json
+```
+
+**Full example (all common flags):**
+
+```bash
+semble host provision my-host \
+  --builder-policy buildbox \
+  --target-host my-host-deploy \
+  --host-keys-dir ./ssh_host_keys/my-host \
+  --disk-encryption-keys /tmp/luks-key ./secrets/my-host/luks-root.key \
+  --generate-hardware-config nixos-facter ./hosts/my-host/facter.json \
+  --disko-mode disko \
+  --phases disko,install,reboot \
+  --build-on remote
+```
+
+### MicroVM Provision
+
+All flags are Semble flags interpreted directly (no passthrough to external tools).
+
+**Basic encrypted provision:**
+
+```bash
+semble host provision my-vm --disk-encryption-keys ./secrets/my-vm-root.key
+```
+
+**With SSH host keys:**
+
+```bash
+semble host provision my-vm \
+  --disk-encryption-keys ./secrets/my-vm-root.key \
+  --host-keys-dir ./ssh_host_keys/my-vm
+```
+
+### Flag Reference
+
+| Flag | Physical Host | MicroVM | Source |
+|------|--------------|---------|--------|
+| `--builder-policy` | ✅ Semble flag | ✅ Semble flag | Semble |
+| `--disk-encryption-keys` | ✅ Forwarded | ✅ MicroVM flag* | tianyi/nixos-anywhere / Semble |
+| `--host-keys-dir` | ✅ Forwarded | ✅ MicroVM flag | tianyi / Semble |
+| `--no-encrypt` | ❌ Error | ✅ Optional | Semble |
+| `--system-store-path` | ❌ Error | ✅ Optional | Semble |
+| `--force-reformat` | ❌ Error | ✅ Optional | Semble |
+| `--target-host` | ✅ Forwarded | ❌ Use `provisionTarget`** | tianyi → nixos-anywhere |
+| `--generate-hardware-config` | ✅ Forwarded | ❌ | tianyi → nixos-anywhere |
+| `--disko-mode` | ✅ Forwarded | ❌ | tianyi → nixos-anywhere |
+| `--phases` | ✅ Forwarded | ❌ | tianyi → nixos-anywhere |
+| `--build-on` | ✅ Forwarded | ❌ | tianyi → nixos-anywhere |
+
+\* For MicroVM, `--disk-encryption-keys` takes one argument (the local key path).  
+\** MicroVM uses `provisionTarget` from host config in `semble.toml`
 
 ## MicroVM Guest Provisioning
 

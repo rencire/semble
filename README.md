@@ -24,7 +24,7 @@ semble host switch my-host --target-host my-host-deploy --builder-policy buildbo
 # install or reinstall NixOS on a remote target host
 semble host provision my-host --target-host my-host-deploy
 # provision a MicroVM guest image and bring it online through its parent host
-semble host provision my-vm --key-file ./secrets/my-vm-root.key
+semble host provision my-vm --disk-encryption-keys ./secrets/my-vm-root.key
 ```
 
 Command behavior summary:
@@ -38,9 +38,9 @@ Command behavior summary:
   - physical-host passthrough: any trailing args after `--`, forwarded to
     `nixos-anywhere` as-is, including `--disk-encryption-keys` for full-disk
     encryption secrets
-  - MicroVM-only options: `--key-file`, `--install-ssh-host-keys`,
+  - MicroVM-only options: `--disk-encryption-keys`, `--host-keys-dir`,
     `--system-store-path`, `--no-encrypt`, and `--force-reformat`
-  - `--key-file` is for Semble's MicroVM guest provisioning path, not for
+  - `--disk-encryption-keys` is for Semble's MicroVM guest provisioning path, not for
     `nixos-anywhere`
 - `semble host keys ssh add|delete <host>` manages repository SSH host keys
 - `semble host keys initrd-ssh add|delete <host>` manages initrd SSH host keys
@@ -51,9 +51,9 @@ Command behavior summary:
   installs into the mounted root, optionally copies SSH host keys into
   `/etc/ssh/`, validates the installed guest system, and restarts the MicroVM
   on the parent host
-  - MicroVM-only options: `--key-file`, `--install-ssh-host-keys`,
+  - MicroVM-only options: `--disk-encryption-keys`, `--host-keys-dir`,
     `--system-store-path`, `--no-encrypt`, and `--force-reformat`
-  - `--key-file` is required for encrypted provisioning and is staged into the
+  - `--disk-encryption-keys` is required for encrypted provisioning and is staged into the
     MicroVM guest workflow by Semble
   - encrypted provisioning uses the `cryptroot` mapper name by default
 

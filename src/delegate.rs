@@ -184,8 +184,8 @@ pub fn run_host_provision(paths: &RepoPaths, args: HostProvisionArgs) -> Result<
 }
 
 fn run_physical_host_provision(paths: &RepoPaths, args: HostProvisionArgs) -> Result<()> {
-    if args.key_file.is_some()
-        || args.install_ssh_host_keys.is_some()
+    if args.disk_encryption_keys.is_some()
+        || args.host_keys_dir.is_some()
         || args.system_store_path.is_some()
         || args.no_encrypt
         || args.force_reformat
@@ -261,8 +261,8 @@ fn run_microvm_host_provision(
             guest: args.hostname,
             parent,
             builder_policy: args.builder_policy,
-            key_file: args.key_file,
-            install_ssh_host_keys: args.install_ssh_host_keys,
+            disk_encryption_keys: args.disk_encryption_keys,
+            host_keys_dir: args.host_keys_dir,
             system_store_path: args.system_store_path,
             no_encrypt: args.no_encrypt,
             force_reformat: args.force_reformat,
