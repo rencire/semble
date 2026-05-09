@@ -7,13 +7,22 @@ use anyhow::Result;
 use std::env;
 use std::ffi::{OsStr, OsString};
 
+fn nh_subcommand(system: &str) -> &'static str {
+    if system.ends_with("-darwin") {
+        "darwin"
+    } else {
+        "os"
+    }
+}
+
 pub fn build_host_args(
     action: &str,
     args: &DelegatedHostArgs,
     builders_override: Option<&str>,
+    system: &str,
 ) -> Vec<OsString> {
     let mut delegated = vec![
-        OsString::from("os"),
+        OsString::from(nh_subcommand(system)),
         OsString::from(action),
         OsString::from("."),
         OsString::from("-H"),
@@ -144,7 +153,13 @@ fn apply_builder_policy(paths: &RepoPaths, args: &DelegatedHostArgs) -> Result<O
     Ok(Some(()))
 }
 
+fn load_host_system(paths: &RepoPaths, hostname: &str) -> Result<String> {
+    let config = load_host_provision_config(paths, hostname)?;
+    Ok(config.system)
+}
+
 pub fn run_host_build(paths: &RepoPaths, args: DelegatedHostArgs) -> Result<()> {
+    let system = load_host_system(paths, &args.hostname)?;
     let args = normalize_builder_policy(args)?;
     let builders_override = args
         .builder_policy
@@ -156,10 +171,12 @@ pub fn run_host_build(paths: &RepoPaths, args: DelegatedHostArgs) -> Result<()> 
         "build",
         &args,
         builders_override.as_deref(),
+        &system,
     ))
 }
 
 pub fn run_host_switch(paths: &RepoPaths, args: DelegatedHostArgs) -> Result<()> {
+    let system = load_host_system(paths, &args.hostname)?;
     let args = normalize_builder_policy(args)?;
     let args = normalize_switch_args(args);
     let builders_override = args
@@ -172,6 +189,7 @@ pub fn run_host_switch(paths: &RepoPaths, args: DelegatedHostArgs) -> Result<()>
         "switch",
         &args,
         builders_override.as_deref(),
+        &system,
     ))
 }
 
@@ -296,8 +314,22 @@ mod tests {
         };
 
         assert_eq!(
-            strings(&build_host_args("build", &args, None)),
+            strings(&build_host_args("build", &args, None, "x86_64-linux")),
             vec!["os", "build", ".", "-H", "atlas", "--ask"]
+        );
+    }
+
+    #[test]
+    fn builds_darwin_host_args() {
+        let args = DelegatedHostArgs {
+            hostname: String::from("m1mbp"),
+            builder_policy: None,
+            extra_args: vec![OsString::from("--ask")],
+        };
+
+        assert_eq!(
+            strings(&build_host_args("switch", &args, None, "aarch64-darwin")),
+            vec!["darwin", "switch", ".", "-H", "m1mbp", "--ask"]
         );
     }
 
@@ -310,7 +342,7 @@ mod tests {
         };
 
         assert_eq!(
-            strings(&build_host_args("switch", &args, None)),
+            strings(&build_host_args("switch", &args, None, "x86_64-linux")),
             vec!["os", "switch", ".", "-H", "atlas", "--dry-run", "--ask"]
         );
     }
@@ -395,6 +427,7 @@ mod tests {
                 "switch",
                 &args,
                 Some("ssh://l380y-deploy x86_64-linux - 6 1 benchmark,big-parallel"),
+                "x86_64-linux",
             )),
             vec![
                 "os",

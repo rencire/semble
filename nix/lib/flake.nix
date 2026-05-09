@@ -68,6 +68,7 @@ in
         hosts = lib.mapAttrs (
           key: host:
           {
+            inherit (host) system;
             type = host.type;
             provisionTarget = host.provisionTarget or null;
           }

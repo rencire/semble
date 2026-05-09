@@ -112,6 +112,7 @@ pub enum HostType {
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct HostProvisionConfig {
+    pub system: String,
     #[serde(rename = "type")]
     pub host_type: HostType,
     #[serde(default, rename = "provisionTarget")]
@@ -332,7 +333,8 @@ network_secrets_file = "secrets/network.yaml"
         let paths = RepoPaths::new(tempdir.path()).unwrap();
         let config = load_host_provision_config_with(&paths, "atlas", |_paths, _host_name| {
             Ok(Some(
-                br#"{"type":"microvm","provisionTarget":"thor-admin"}"#.to_vec(),
+                br#"{"system":"x86_64-linux","type":"microvm","provisionTarget":"thor-admin"}"#
+                    .to_vec(),
             ))
         })
         .unwrap();
@@ -340,6 +342,7 @@ network_secrets_file = "secrets/network.yaml"
         assert_eq!(
             config.unwrap(),
             HostProvisionConfig {
+                system: "x86_64-linux".into(),
                 host_type: HostType::Microvm,
                 provision_target: Some("thor-admin".into())
             }
