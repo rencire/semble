@@ -12,10 +12,7 @@ in
     }:
     let
       project = discoverProject { inherit inputs root; };
-    in
-    {
-      nixosConfigurations = lib.mapAttrs (
-        key: host:
+      buildHost = key: host:
         let
           resolved = resolveHost {
             inherit project key;
@@ -39,8 +36,13 @@ in
             };
           } // extraSpecialArgs;
           modules = resolved.modules ++ [ (resolution.overlayModule overlays) ];
-        }
-      ) project.hostsByKey;
+        };
+      nixosHosts = lib.filterAttrs (_: host: !lib.hasSuffix "-darwin" host.system) project.hostsByKey;
+      darwinHosts = lib.filterAttrs (_: host: lib.hasSuffix "-darwin" host.system) project.hostsByKey;
+    in
+    {
+      nixosConfigurations = lib.mapAttrs buildHost nixosHosts;
+      darwinConfigurations = lib.mapAttrs buildHost darwinHosts;
 
       images = lib.mapAttrs (
         key: _:

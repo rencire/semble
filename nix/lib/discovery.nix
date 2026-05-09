@@ -28,7 +28,11 @@ let
       value = assertAllowedFields path [ "hostName" "system" "builder" "type" "provisionTarget" "profiles" "presets" "modules" "inputModules" "configFile" "configuration" ] raw;
       hostName = assertString path "hostName" (value.hostName or (fileError path "missing required field `hostName`"));
       system = assertString path "system" (value.system or (fileError path "missing required field `system`"));
-      builder = assertString path "builder" (value.builder or "nixpkgs.lib.nixosSystem");
+      builder = assertString path "builder" (value.builder or (
+        if lib.hasSuffix "-darwin" system
+        then "nix-darwin.lib.darwinSystem"
+        else "nixpkgs.lib.nixosSystem"
+      ));
       hostType = assertString path "type" (value.type or (fileError path "missing required field `type`"));
       _typeCheck =
         assertCondition
@@ -238,7 +242,9 @@ let
       hosts = discoverKind {
         inherit root;
         name = "hosts";
-        includeFile = fileName: _: fileName == "default.nix";
+        includeFile = fileName: relativePath:
+          fileName == "default.nix" &&
+          builtins.length (lib.splitString "/" relativePath) == 2;
         normalize = normalizeHost;
       };
       modules = discoverKind {

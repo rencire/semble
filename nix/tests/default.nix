@@ -12,6 +12,11 @@ let
 
   testInputs = {
     inherit nixpkgs;
+    nix-darwin = {
+      lib.darwinSystem = _args: {
+        config.networking.hostName = "apollo";
+      };
+    };
     fake = {
       lib.nixosSystemFull =
         args:
@@ -96,6 +101,7 @@ let
   hostConfigWithOverlay = flakeWithOverlay.nixosConfigurations.atlas.config;
   beaconConfig = flake.nixosConfigurations.beacon.config;
   cedarConfig = flake.nixosConfigurations.cedar.config;
+  apolloConfig = flake.darwinConfigurations.apollo.config;
   duplicateInputOverlapConfig = duplicateInputOverlapFlake.nixosConfigurations.atlas.config;
   installerImage = flake.images.installer;
   installerConfig = resolvedImage.system.config;
@@ -116,7 +122,7 @@ let
     true;
 in
 {
-  discoveredHosts = assert (builtins.attrNames project.hostsByKey == [ "atlas" "beacon" "cedar" ]); true;
+  discoveredHosts = assert (builtins.attrNames project.hostsByKey == [ "apollo" "atlas" "beacon" "cedar" ]); true;
   discoveredModules = assert (builtins.attrNames project.modulesByKey == [ "branding" "extra" "security.sops" ]); true;
   discoveredPresets = assert (builtins.attrNames project.presetsByKey == [ "base" "security.sopsDefault" ]); true;
   discoveredImages = assert (builtins.attrNames project.imagesByKey == [ "installer" ]); true;
@@ -155,6 +161,11 @@ in
   duplicateInputOverlapConfigApplies = assert (duplicateInputOverlapConfig.environment.variables.FAKE_INPUT == "enabled"); true;
   microvmHostType = assert (project.hostsByKey.beacon.type == "microvm"); true;
   microvmHostProvisionTarget = assert (project.hostsByKey.beacon.provisionTarget == "thor-admin"); true;
+  darwinDefaultBuilder = assert (project.hostsByKey.apollo.builder == "nix-darwin.lib.darwinSystem"); true;
+  darwinHostInDarwinConfigurations = assert (flake ? darwinConfigurations && flake.darwinConfigurations ? apollo); true;
+  darwinHostNotInNixosConfigurations = assert (!(flake.nixosConfigurations ? apollo)); true;
+  darwinHostConfigApplies = assert (apolloConfig.networking.hostName == "apollo"); true;
+  hostDepthFilterExcludesNested = assert (!(project.hostsByKey ? "apollo.nested")); true;
   unknownPresetFails = expectFailure unknownPresetRoot;
   missingConfigFails = expectFailure missingConfigRoot;
   unknownImageHostFails = expectFailure unknownImageHostRoot;
