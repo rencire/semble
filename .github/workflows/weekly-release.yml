@@ -1,0 +1,104 @@
+name: Weekly Release
+
+on:
+  schedule:
+    - cron: "0 0 * * 3" # Wednesday midnight UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version bump
+        id: bump
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No tags found, cannot determine bump"
+            exit 1
+          fi
+
+          COMMITS=$(git log "${LATEST_TAG}..HEAD" --pretty=format:"%s" 2>/dev/null)
+          if [ -z "$COMMITS" ]; then
+            echo "No new commits since ${LATEST_TAG}, skipping release"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          BUMP=""
+          while IFS= read -r subject; do
+            if echo "$subject" | grep -qiE 'BREAKING CHANGE|^[a-z]+(\(.+\))?!:'; then
+              BUMP="major"
+              break
+            elif echo "$subject" | grep -qE '^feat(\(.+\))?:'; then
+              BUMP="minor"
+            elif echo "$subject" | grep -qE '^fix(\(.+\))?:' && [ "$BUMP" != "minor" ]; then
+              BUMP="patch"
+            fi
+          done <<< "$COMMITS"
+
+          if [ -z "$BUMP" ]; then
+            echo "No releasable commits (only docs/test/chore/refactor), skipping"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Parse current version from tag
+          VERSION="${LATEST_TAG#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "Bump type: ${BUMP}, new version: ${NEW_VERSION}"
+
+      - name: Update version files
+        if: steps.bump.outputs.skip != 'true'
+        run: |
+          VERSION=${{ steps.bump.outputs.version }}
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          sed -i "s/version = \".*\";/version = \"${VERSION}\";/" nix/packages/semble.nix
+
+      - name: Install Rust toolchain
+        if: steps.bump.outputs.skip != 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Regenerate Cargo.lock
+        if: steps.bump.outputs.skip != 'true'
+        run: cargo check
+
+      - name: Commit and tag
+        if: steps.bump.outputs.skip != 'true'
+        run: |
+          VERSION=${{ steps.bump.outputs.version }}
+          TAG=${{ steps.bump.outputs.tag }}
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock nix/packages/semble.nix
+          git commit -m "chore(release): bump version to ${VERSION}"
+          git tag "$TAG"
+          git pull --rebase origin main
+          git push origin HEAD "$TAG"
+
+      - name: Create GitHub release
+        if: steps.bump.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.bump.outputs.tag }}" \
+            --generate-notes \
+            --title "${{ steps.bump.outputs.tag }}"
