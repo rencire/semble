@@ -6,6 +6,10 @@ use crate::repo::{load_host_provision_config, HostType};
 use anyhow::Result;
 use std::env;
 use std::ffi::{OsStr, OsString};
+use std::fs;
+use std::path::Path;
+use std::process::{Command, Stdio};
+use tempfile::TempDir;
 
 fn nh_subcommand(system: &str) -> &'static str {
     if system.ends_with("-darwin") {
@@ -34,17 +38,6 @@ pub fn build_host_args(
         delegated.push(OsString::from("--max-jobs"));
         delegated.push(OsString::from("0"));
     }
-    delegated.extend(args.extra_args.iter().cloned());
-    delegated
-}
-
-pub fn provision_host_args(args: &DelegatedHostArgs) -> Vec<OsString> {
-    let mut delegated = vec![
-        OsString::from("provision"),
-        OsString::from("."),
-        OsString::from("-H"),
-        OsString::from(&args.hostname),
-    ];
     delegated.extend(args.extra_args.iter().cloned());
     delegated
 }
@@ -132,12 +125,12 @@ fn merge_nix_config(existing: Option<&OsStr>, extra_line: &str) -> OsString {
     }
 }
 
-fn apply_builder_policy(paths: &RepoPaths, args: &DelegatedHostArgs) -> Result<Option<()>> {
+fn validate_builder_policy(paths: &RepoPaths, args: &DelegatedHostArgs) -> Result<()> {
     let Some(policy_name) = args.builder_policy.as_deref() else {
-        return Ok(None);
+        return Ok(());
     };
 
-    let _policy = paths.builder_policy(policy_name).ok_or_else(|| {
+    paths.builder_policy(policy_name).ok_or_else(|| {
         anyhow::anyhow!(
             "unknown builder policy `{policy_name}` in {}",
             paths.root().join("semble.toml").display()
@@ -150,7 +143,7 @@ fn apply_builder_policy(paths: &RepoPaths, args: &DelegatedHostArgs) -> Result<O
         ));
     }
 
-    Ok(Some(()))
+    Ok(())
 }
 
 fn load_host_system(paths: &RepoPaths, hostname: &str) -> Result<String> {
@@ -158,39 +151,185 @@ fn load_host_system(paths: &RepoPaths, hostname: &str) -> Result<String> {
     Ok(config.system)
 }
 
-pub fn run_host_build(paths: &RepoPaths, args: DelegatedHostArgs) -> Result<()> {
+fn run_nh(args: Vec<OsString>) -> Result<()> {
+    let status = Command::new("nh")
+        .args(&args)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        anyhow::bail!("nh exited with status {}", status)
+    }
+}
+
+fn run_nh_host(paths: &RepoPaths, action: &str, args: DelegatedHostArgs) -> Result<()> {
     let system = load_host_system(paths, &args.hostname)?;
     let args = normalize_builder_policy(args)?;
     let builders_override = args
         .builder_policy
         .as_deref()
-        .and_then(|policy_name| paths.builder_policy(policy_name))
+        .and_then(|name| paths.builder_policy(name))
         .map(serialize_builder_policy);
-    let _env_guard = apply_builder_policy(paths, &args)?;
-    tianyi::run_args(build_host_args(
-        "build",
-        &args,
-        builders_override.as_deref(),
-        &system,
-    ))
+    validate_builder_policy(paths, &args)?;
+    run_nh(build_host_args(action, &args, builders_override.as_deref(), &system))
+}
+
+// Restores NIX_BUILDERS and NIX_CONFIG to their previous values on drop.
+struct ProvisionEnvGuard(Option<OsString>, Option<OsString>);
+
+impl Drop for ProvisionEnvGuard {
+    fn drop(&mut self) {
+        match &self.0 {
+            Some(value) => env::set_var("NIX_BUILDERS", value),
+            None => env::remove_var("NIX_BUILDERS"),
+        }
+        match &self.1 {
+            Some(value) => env::set_var("NIX_CONFIG", value),
+            None => env::remove_var("NIX_CONFIG"),
+        }
+    }
+}
+
+fn setup_provision_builder_env(
+    paths: &RepoPaths,
+    policy_name: &str,
+) -> Result<ProvisionEnvGuard> {
+    let policy = paths.builder_policy(policy_name).ok_or_else(|| {
+        anyhow::anyhow!(
+            "unknown builder policy `{policy_name}` in {}",
+            paths.root().join("semble.toml").display()
+        )
+    })?;
+    let prev_builders = env::var_os("NIX_BUILDERS");
+    let prev_config = env::var_os("NIX_CONFIG");
+    env::set_var("NIX_BUILDERS", serialize_builder_policy(policy));
+    env::set_var(
+        "NIX_CONFIG",
+        merge_nix_config(prev_config.as_deref(), "max-jobs = 0"),
+    );
+    Ok(ProvisionEnvGuard(prev_builders, prev_config))
+}
+
+#[derive(Debug)]
+struct PhysicalProvisionArgs {
+    target_host: String,
+    host_keys_dir: Option<String>,
+    passthrough_args: Vec<OsString>,
+}
+
+fn parse_physical_provision_args(extra_args: Vec<OsString>) -> Result<PhysicalProvisionArgs> {
+    let mut target_host = None;
+    let mut host_keys_dir = None;
+    let mut passthrough_args = Vec::new();
+    let mut iter = extra_args.into_iter();
+
+    while let Some(arg) = iter.next() {
+        if arg == "--target-host" {
+            let value = iter
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("`--target-host` requires a value"))?;
+            target_host = Some(
+                value
+                    .into_string()
+                    .map_err(|_| anyhow::anyhow!("`--target-host` value must be valid UTF-8"))?,
+            );
+        } else if arg == "--host-keys-dir" {
+            let value = iter
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("`--host-keys-dir` requires a value"))?;
+            host_keys_dir = Some(
+                value
+                    .into_string()
+                    .map_err(|_| anyhow::anyhow!("`--host-keys-dir` value must be valid UTF-8"))?,
+            );
+        } else {
+            passthrough_args.push(arg);
+        }
+    }
+
+    let target_host = target_host.ok_or_else(|| {
+        anyhow::anyhow!(
+            "physical host provision requires `--target-host <HOST>` in passthrough args"
+        )
+    })?;
+
+    Ok(PhysicalProvisionArgs {
+        target_host,
+        host_keys_dir,
+        passthrough_args,
+    })
+}
+
+fn build_nixos_anywhere_args(
+    flake_hostname: &str,
+    target_host: &str,
+    passthrough: &[OsString],
+    extra_files_dir: Option<&str>,
+) -> Vec<OsString> {
+    let mut args = vec![
+        OsString::from("--flake"),
+        OsString::from(flake_hostname),
+        OsString::from("--target-host"),
+        OsString::from(target_host),
+    ];
+    if let Some(dir) = extra_files_dir {
+        args.push(OsString::from("--extra-files"));
+        args.push(OsString::from(dir));
+    }
+    args.extend_from_slice(passthrough);
+    args
+}
+
+fn prepare_host_keys(host_keys_dir: &str) -> Result<TempDir> {
+    let temp_dir = TempDir::new()?;
+    let ssh_dir = temp_dir.path().join("etc/ssh");
+    fs::create_dir_all(&ssh_dir)?;
+
+    let src = Path::new(host_keys_dir);
+    let private_src = src.join("ssh_host_ed25519_key");
+    let public_src = src.join("ssh_host_ed25519_key.pub");
+
+    let private_dst = ssh_dir.join("ssh_host_ed25519_key");
+    let public_dst = ssh_dir.join("ssh_host_ed25519_key.pub");
+
+    fs::copy(&private_src, &private_dst)?;
+    fs::copy(&public_src, &public_dst)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&private_dst, fs::Permissions::from_mode(0o600))?;
+        fs::set_permissions(&public_dst, fs::Permissions::from_mode(0o644))?;
+    }
+
+    Ok(temp_dir)
+}
+
+fn run_nixos_anywhere(args: Vec<OsString>) -> Result<()> {
+    let binary =
+        env::var("NIXOS_ANYWHERE_BIN").unwrap_or_else(|_| String::from("nixos-anywhere"));
+    let status = Command::new(&binary)
+        .args(&args)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        anyhow::bail!("nixos-anywhere exited with status {}", status)
+    }
+}
+
+pub fn run_host_build(paths: &RepoPaths, args: DelegatedHostArgs) -> Result<()> {
+    run_nh_host(paths, "build", args)
 }
 
 pub fn run_host_switch(paths: &RepoPaths, args: DelegatedHostArgs) -> Result<()> {
-    let system = load_host_system(paths, &args.hostname)?;
-    let args = normalize_builder_policy(args)?;
-    let args = normalize_switch_args(args);
-    let builders_override = args
-        .builder_policy
-        .as_deref()
-        .and_then(|policy_name| paths.builder_policy(policy_name))
-        .map(serialize_builder_policy);
-    let _env_guard = apply_builder_policy(paths, &args)?;
-    tianyi::run_args(build_host_args(
-        "switch",
-        &args,
-        builders_override.as_deref(),
-        &system,
-    ))
+    run_nh_host(paths, "switch", normalize_switch_args(args))
 }
 
 pub fn run_host_provision(paths: &RepoPaths, args: HostProvisionArgs) -> Result<()> {
@@ -213,46 +352,38 @@ fn run_physical_host_provision(paths: &RepoPaths, args: HostProvisionArgs) -> Re
         ));
     }
 
-    let args = DelegatedHostArgs {
-        hostname: args.hostname,
+    let delegated = DelegatedHostArgs {
+        hostname: args.hostname.clone(),
         builder_policy: args.builder_policy,
         extra_args: args.extra_args,
     };
-    let args = normalize_builder_policy(args)?;
-    let _env_guard = apply_builder_policy(paths, &args)?;
-    if let Some(policy_name) = args.builder_policy.as_deref() {
-        let policy = paths.builder_policy(policy_name).ok_or_else(|| {
-            anyhow::anyhow!(
-                "unknown builder policy `{policy_name}` in {}",
-                paths.root().join("semble.toml").display()
-            )
-        })?;
+    let delegated = normalize_builder_policy(delegated)?;
+    validate_builder_policy(paths, &delegated)?;
 
-        let previous_nix_builders = env::var_os("NIX_BUILDERS");
-        let previous_nix_config = env::var_os("NIX_CONFIG");
-        env::set_var("NIX_BUILDERS", serialize_builder_policy(policy));
-        env::set_var(
-            "NIX_CONFIG",
-            merge_nix_config(previous_nix_config.as_deref(), "max-jobs = 0"),
-        );
+    let parsed = parse_physical_provision_args(delegated.extra_args)?;
 
-        struct ProvisionEnvGuard(Option<OsString>, Option<OsString>);
-        impl Drop for ProvisionEnvGuard {
-            fn drop(&mut self) {
-                match &self.0 {
-                    Some(value) => env::set_var("NIX_BUILDERS", value),
-                    None => env::remove_var("NIX_BUILDERS"),
-                }
-                match &self.1 {
-                    Some(value) => env::set_var("NIX_CONFIG", value),
-                    None => env::remove_var("NIX_CONFIG"),
-                }
-            }
-        }
-        let _guard = ProvisionEnvGuard(previous_nix_builders, previous_nix_config);
-        return tianyi::run_args(provision_host_args(&args));
-    }
-    tianyi::run_args(provision_host_args(&args))
+    let host_keys_temp = parsed
+        .host_keys_dir
+        .as_deref()
+        .map(prepare_host_keys)
+        .transpose()?;
+    let extra_files_dir = host_keys_temp.as_ref().and_then(|t| t.path().to_str());
+
+    let flake_hostname = format!(".#{}", args.hostname);
+    let na_args = build_nixos_anywhere_args(
+        &flake_hostname,
+        &parsed.target_host,
+        &parsed.passthrough_args,
+        extra_files_dir,
+    );
+
+    let _builder_env = delegated
+        .builder_policy
+        .as_deref()
+        .map(|name| setup_provision_builder_env(paths, name))
+        .transpose()?;
+
+    run_nixos_anywhere(na_args)
 }
 
 fn run_microvm_host_provision(
@@ -291,8 +422,9 @@ fn run_microvm_host_provision(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_host_args, merge_nix_config, normalize_builder_policy, normalize_switch_args,
-        provision_host_args, serialize_builder_policy,
+        build_host_args, build_nixos_anywhere_args, merge_nix_config, normalize_builder_policy,
+        normalize_switch_args, parse_physical_provision_args, prepare_host_keys,
+        serialize_builder_policy,
     };
     use crate::cli::DelegatedHostArgs;
     use crate::config::BuilderPolicyConfig;
@@ -304,6 +436,8 @@ mod tests {
             .map(|value| value.to_string_lossy().into_owned())
             .collect()
     }
+
+    // --- nh arg construction ---
 
     #[test]
     fn builds_host_build_args() {
@@ -445,32 +579,6 @@ mod tests {
     }
 
     #[test]
-    fn builds_host_provision_args() {
-        let args = DelegatedHostArgs {
-            hostname: String::from("atlas"),
-            builder_policy: None,
-            extra_args: vec![
-                OsString::from("--target-host"),
-                OsString::from("atlas-deploy"),
-                OsString::from("--debug"),
-            ],
-        };
-
-        assert_eq!(
-            strings(&provision_host_args(&args)),
-            vec![
-                "provision",
-                ".",
-                "-H",
-                "atlas",
-                "--target-host",
-                "atlas-deploy",
-                "--debug",
-            ]
-        );
-    }
-
-    #[test]
     fn serializes_builder_policy_to_nix_builders_entry() {
         let policy = BuilderPolicyConfig {
             name: "l380y".into(),
@@ -548,5 +656,206 @@ mod tests {
 
         let error = normalize_builder_policy(args).unwrap_err();
         assert!(error.to_string().contains("provided more than once"));
+    }
+
+    // --- parse_physical_provision_args ---
+
+    #[test]
+    fn parses_target_host_from_provision_extra_args() {
+        let extra_args = vec![
+            OsString::from("--target-host"),
+            OsString::from("atlas-deploy"),
+            OsString::from("--debug"),
+        ];
+        let parsed = parse_physical_provision_args(extra_args).unwrap();
+        assert_eq!(parsed.target_host, "atlas-deploy");
+        assert_eq!(parsed.host_keys_dir, None);
+        assert_eq!(strings(&parsed.passthrough_args), vec!["--debug"]);
+    }
+
+    #[test]
+    fn parses_host_keys_dir_from_provision_extra_args() {
+        let extra_args = vec![
+            OsString::from("--target-host"),
+            OsString::from("root@example"),
+            OsString::from("--host-keys-dir"),
+            OsString::from("/tmp/keys"),
+            OsString::from("-i"),
+            OsString::from("/tmp/id"),
+            OsString::from("--phases"),
+            OsString::from("disko,install,reboot"),
+        ];
+        let parsed = parse_physical_provision_args(extra_args).unwrap();
+        assert_eq!(parsed.target_host, "root@example");
+        assert_eq!(parsed.host_keys_dir, Some(String::from("/tmp/keys")));
+        assert_eq!(
+            strings(&parsed.passthrough_args),
+            vec!["-i", "/tmp/id", "--phases", "disko,install,reboot"]
+        );
+    }
+
+    #[test]
+    fn rejects_provision_extra_args_missing_target_host() {
+        let extra_args = vec![OsString::from("--debug")];
+        let err = parse_physical_provision_args(extra_args).unwrap_err();
+        assert!(err.to_string().contains("--target-host"));
+    }
+
+    #[test]
+    fn rejects_target_host_flag_without_value() {
+        let extra_args = vec![OsString::from("--target-host")];
+        let err = parse_physical_provision_args(extra_args).unwrap_err();
+        assert!(err.to_string().contains("requires a value"));
+    }
+
+    #[test]
+    fn rejects_host_keys_dir_flag_without_value() {
+        let extra_args = vec![
+            OsString::from("--target-host"),
+            OsString::from("root@example"),
+            OsString::from("--host-keys-dir"),
+        ];
+        let err = parse_physical_provision_args(extra_args).unwrap_err();
+        assert!(err.to_string().contains("requires a value"));
+    }
+
+    #[test]
+    fn provision_extra_args_without_host_keys_dir() {
+        let extra_args = vec![
+            OsString::from("--target-host"),
+            OsString::from("root@example"),
+            OsString::from("--debug"),
+        ];
+        let parsed = parse_physical_provision_args(extra_args).unwrap();
+        assert_eq!(parsed.host_keys_dir, None);
+        assert_eq!(strings(&parsed.passthrough_args), vec!["--debug"]);
+    }
+
+    // --- build_nixos_anywhere_args ---
+
+    #[test]
+    fn builds_minimal_nixos_anywhere_args() {
+        let args = build_nixos_anywhere_args(".#atlas", "atlas-deploy", &[], None);
+        assert_eq!(
+            strings(&args),
+            vec!["--flake", ".#atlas", "--target-host", "atlas-deploy"]
+        );
+    }
+
+    #[test]
+    fn builds_nixos_anywhere_args_with_extra_files() {
+        let args =
+            build_nixos_anywhere_args(".#atlas", "atlas-deploy", &[], Some("/tmp/extra-files"));
+        assert_eq!(
+            strings(&args),
+            vec![
+                "--flake",
+                ".#atlas",
+                "--target-host",
+                "atlas-deploy",
+                "--extra-files",
+                "/tmp/extra-files",
+            ]
+        );
+    }
+
+    #[test]
+    fn builds_nixos_anywhere_args_with_passthrough() {
+        let passthrough = vec![
+            OsString::from("-i"),
+            OsString::from("/tmp/id"),
+            OsString::from("--phases"),
+            OsString::from("disko,install,reboot"),
+        ];
+        let args = build_nixos_anywhere_args(".#atlas", "root@example", &passthrough, None);
+        assert_eq!(
+            strings(&args),
+            vec![
+                "--flake",
+                ".#atlas",
+                "--target-host",
+                "root@example",
+                "-i",
+                "/tmp/id",
+                "--phases",
+                "disko,install,reboot",
+            ]
+        );
+    }
+
+    #[test]
+    fn builds_nixos_anywhere_args_extra_files_precede_passthrough() {
+        let passthrough = vec![OsString::from("--debug")];
+        let args = build_nixos_anywhere_args(
+            ".#atlas",
+            "root@example",
+            &passthrough,
+            Some("/tmp/extra-files"),
+        );
+        assert_eq!(
+            strings(&args),
+            vec![
+                "--flake",
+                ".#atlas",
+                "--target-host",
+                "root@example",
+                "--extra-files",
+                "/tmp/extra-files",
+                "--debug",
+            ]
+        );
+    }
+
+    // --- prepare_host_keys ---
+
+    #[test]
+    fn prepare_host_keys_creates_ssh_dir_with_keys() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        let src = TempDir::new().unwrap();
+        fs::write(src.path().join("ssh_host_ed25519_key"), "private").unwrap();
+        fs::write(src.path().join("ssh_host_ed25519_key.pub"), "public").unwrap();
+
+        let result = prepare_host_keys(src.path().to_str().unwrap()).unwrap();
+
+        let ssh_dir = result.path().join("etc/ssh");
+        assert!(ssh_dir.join("ssh_host_ed25519_key").exists());
+        assert!(ssh_dir.join("ssh_host_ed25519_key.pub").exists());
+    }
+
+    #[test]
+    fn prepare_host_keys_fails_for_missing_source() {
+        let err = prepare_host_keys("/nonexistent/path");
+        assert!(err.is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn prepare_host_keys_sets_correct_permissions() {
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+        use tempfile::TempDir;
+
+        let src = TempDir::new().unwrap();
+        fs::write(src.path().join("ssh_host_ed25519_key"), "private").unwrap();
+        fs::write(src.path().join("ssh_host_ed25519_key.pub"), "public").unwrap();
+
+        let result = prepare_host_keys(src.path().to_str().unwrap()).unwrap();
+        let ssh_dir = result.path().join("etc/ssh");
+
+        let private_mode = fs::metadata(ssh_dir.join("ssh_host_ed25519_key"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        let public_mode = fs::metadata(ssh_dir.join("ssh_host_ed25519_key.pub"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+
+        assert_eq!(private_mode, 0o600);
+        assert_eq!(public_mode, 0o644);
     }
 }

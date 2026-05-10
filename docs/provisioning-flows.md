@@ -18,9 +18,9 @@ The ownership of those steps differs by workflow:
 - `semble host provision` should own steps 2, 3, 4, and 5 for MicroVM guest
   provisioning, including the host-side activation/start step.
 
-For physical hosts, `host provision` forwards trailing passthrough arguments to
-`tianyi provision` and then to `nixos-anywhere`. Use `--disk-encryption-keys`
-there for encrypted disk setup; Semble does not interpret that flag itself.
+For physical hosts, `host provision` forwards trailing passthrough arguments
+directly to `nixos-anywhere`. Use `--disk-encryption-keys` there for encrypted
+disk setup; Semble does not interpret that flag itself.
 The MicroVM-only flags on `host provision` are `--disk-encryption-keys`,
 `--host-keys-dir`, `--system-store-path`, `--no-encrypt`, and
 `--force-reformat`.
@@ -32,8 +32,7 @@ stages the guest root unlock key before the image is installed.
 
 ### Physical Host Provision
 
-All flags after the hostname are forwarded to `tianyi provision`, which then calls
-`nixos-anywhere`. No `--` separator is needed.
+All flags after the hostname are forwarded directly to `nixos-anywhere`. No `--` separator is needed.
 
 **Basic provision:**
 
@@ -87,16 +86,16 @@ semble host provision my-vm \
 | Flag | Physical Host | MicroVM | Source |
 |------|--------------|---------|--------|
 | `--builder-policy` | ✅ Semble flag | ✅ Semble flag | Semble |
-| `--disk-encryption-keys` | ✅ Forwarded | ✅ MicroVM flag* | tianyi/nixos-anywhere / Semble |
-| `--host-keys-dir` | ✅ Forwarded | ✅ MicroVM flag | tianyi / Semble |
+| `--disk-encryption-keys` | ✅ Forwarded | ✅ MicroVM flag* | nixos-anywhere / Semble |
+| `--host-keys-dir` | ✅ Forwarded | ✅ MicroVM flag | Semble |
 | `--no-encrypt` | ❌ Error | ✅ Optional | Semble |
 | `--system-store-path` | ❌ Error | ✅ Optional | Semble |
 | `--force-reformat` | ❌ Error | ✅ Optional | Semble |
-| `--target-host` | ✅ Forwarded | ❌ Use `provisionTarget`** | tianyi → nixos-anywhere |
-| `--generate-hardware-config` | ✅ Forwarded | ❌ | tianyi → nixos-anywhere |
-| `--disko-mode` | ✅ Forwarded | ❌ | tianyi → nixos-anywhere |
-| `--phases` | ✅ Forwarded | ❌ | tianyi → nixos-anywhere |
-| `--build-on` | ✅ Forwarded | ❌ | tianyi → nixos-anywhere |
+| `--target-host` | ✅ Forwarded | ❌ Use `provisionTarget`** | nixos-anywhere |
+| `--generate-hardware-config` | ✅ Forwarded | ❌ | nixos-anywhere |
+| `--disko-mode` | ✅ Forwarded | ❌ | nixos-anywhere |
+| `--phases` | ✅ Forwarded | ❌ | nixos-anywhere |
+| `--build-on` | ✅ Forwarded | ❌ | nixos-anywhere |
 
 \* For MicroVM, `--disk-encryption-keys` takes one argument (the local key path).  
 \** MicroVM uses `provisionTarget` from host config in `semble.toml`

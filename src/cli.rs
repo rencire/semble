@@ -121,14 +121,14 @@ pub struct HostProvisionArgs {
     /// Optional builder policy used for the build/install invocation.
     #[arg(long)]
     pub builder_policy: Option<String>,
-    /// Physical-host passthrough args forwarded to `tianyi provision` and then `nixos-anywhere`.
+    /// Physical-host passthrough args forwarded to `nixos-anywhere`.
     /// Use these for `nixos-anywhere` flags such as `--disk-encryption-keys`.
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub extra_args: Vec<OsString>,
     /// Root unlock key for encrypted provisioning (MicroVM: Semble flag; physical: forwarded to nixos-anywhere).
     #[arg(long)]
     pub disk_encryption_keys: Option<String>,
-    /// SSH host keys directory (MicroVM: Semble flag; physical: forwarded to tianyi via --host-keys-dir).
+    /// SSH host keys directory (MicroVM: Semble flag; physical: passthrough to nixos-anywhere via --host-keys-dir).
     #[arg(long)]
     pub host_keys_dir: Option<String>,
     /// MicroVM-only: use an existing Nix store path instead of building.

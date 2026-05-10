@@ -29,15 +29,14 @@ semble host provision my-vm --disk-encryption-keys ./secrets/my-vm-root.key
 
 Command behavior summary:
 - `semble host build <host> [extra args...]`
-  forwards to the equivalent of `tianyi os build . -H <host> [extra args...]`
+  runs `nh os build . -H <host> [extra args...]`
 - `semble host switch <host> [extra args...]`
-  forwards to the equivalent of `tianyi os switch . -H <host> [extra args...]`
+  runs `nh os switch . -H <host> [extra args...]`
 - `semble host provision <host> [extra args...]`
-  forwards to the equivalent of `tianyi provision . -H <host> [extra args...]`
+  for physical hosts: runs `nixos-anywhere --flake .#<host> --target-host <host> [extra args...]`
   - common option: `--builder-policy <name>`
-  - physical-host passthrough: any trailing args after `--`, forwarded to
-    `nixos-anywhere` as-is, including `--disk-encryption-keys` for full-disk
-    encryption secrets
+  - physical-host passthrough: trailing args forwarded to `nixos-anywhere`,
+    including `--target-host`, `--host-keys-dir`, `--disk-encryption-keys`
   - options for both: `--disk-encryption-keys`, `--host-keys-dir`
     (MicroVM: Semble flags; physical: passthrough to nixos-anywhere)
   - MicroVM-only options: `--system-store-path`, `--no-encrypt`, and `--force-reformat`
