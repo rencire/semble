@@ -7,7 +7,6 @@ use anyhow::Result;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs;
-use std::path::Path;
 use std::process::{Command, Stdio};
 use tempfile::TempDir;
 
@@ -288,21 +287,25 @@ fn prepare_host_keys(host_keys_dir: &str) -> Result<TempDir> {
     let ssh_dir = temp_dir.path().join("etc/ssh");
     fs::create_dir_all(&ssh_dir)?;
 
-    let src = Path::new(host_keys_dir);
-    let private_src = src.join("ssh_host_ed25519_key");
-    let public_src = src.join("ssh_host_ed25519_key.pub");
+    for entry in fs::read_dir(host_keys_dir)? {
+        let entry = entry?;
+        let src = entry.path();
+        if !src.is_file() {
+            continue;
+        }
+        let filename = src
+            .file_name()
+            .ok_or_else(|| anyhow::anyhow!("invalid filename in host keys dir"))?;
+        let dst = ssh_dir.join(filename);
+        fs::copy(&src, &dst)?;
 
-    let private_dst = ssh_dir.join("ssh_host_ed25519_key");
-    let public_dst = ssh_dir.join("ssh_host_ed25519_key.pub");
-
-    fs::copy(&private_src, &private_dst)?;
-    fs::copy(&public_src, &public_dst)?;
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&private_dst, fs::Permissions::from_mode(0o600))?;
-        fs::set_permissions(&public_dst, fs::Permissions::from_mode(0o644))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let is_public = src.extension().is_some_and(|ext| ext == "pub");
+            let mode = if is_public { 0o644 } else { 0o600 };
+            fs::set_permissions(&dst, fs::Permissions::from_mode(mode))?;
+        }
     }
 
     Ok(temp_dir)
@@ -809,19 +812,23 @@ mod tests {
     // --- prepare_host_keys ---
 
     #[test]
-    fn prepare_host_keys_creates_ssh_dir_with_keys() {
+    fn prepare_host_keys_copies_all_files_in_directory() {
         use std::fs;
         use tempfile::TempDir;
 
         let src = TempDir::new().unwrap();
         fs::write(src.path().join("ssh_host_ed25519_key"), "private").unwrap();
         fs::write(src.path().join("ssh_host_ed25519_key.pub"), "public").unwrap();
+        fs::write(src.path().join("ssh_host_initrd_ed25519_key"), "initrd-private").unwrap();
+        fs::write(src.path().join("ssh_host_initrd_ed25519_key.pub"), "initrd-public").unwrap();
 
         let result = prepare_host_keys(src.path().to_str().unwrap()).unwrap();
-
         let ssh_dir = result.path().join("etc/ssh");
+
         assert!(ssh_dir.join("ssh_host_ed25519_key").exists());
         assert!(ssh_dir.join("ssh_host_ed25519_key.pub").exists());
+        assert!(ssh_dir.join("ssh_host_initrd_ed25519_key").exists());
+        assert!(ssh_dir.join("ssh_host_initrd_ed25519_key.pub").exists());
     }
 
     #[test]
@@ -840,22 +847,25 @@ mod tests {
         let src = TempDir::new().unwrap();
         fs::write(src.path().join("ssh_host_ed25519_key"), "private").unwrap();
         fs::write(src.path().join("ssh_host_ed25519_key.pub"), "public").unwrap();
+        fs::write(src.path().join("ssh_host_initrd_ed25519_key"), "initrd-private").unwrap();
+        fs::write(src.path().join("ssh_host_initrd_ed25519_key.pub"), "initrd-public").unwrap();
 
         let result = prepare_host_keys(src.path().to_str().unwrap()).unwrap();
         let ssh_dir = result.path().join("etc/ssh");
 
-        let private_mode = fs::metadata(ssh_dir.join("ssh_host_ed25519_key"))
-            .unwrap()
-            .permissions()
-            .mode()
-            & 0o777;
-        let public_mode = fs::metadata(ssh_dir.join("ssh_host_ed25519_key.pub"))
-            .unwrap()
-            .permissions()
-            .mode()
-            & 0o777;
-
-        assert_eq!(private_mode, 0o600);
-        assert_eq!(public_mode, 0o644);
+        let cases = [
+            ("ssh_host_ed25519_key", 0o600),
+            ("ssh_host_ed25519_key.pub", 0o644),
+            ("ssh_host_initrd_ed25519_key", 0o600),
+            ("ssh_host_initrd_ed25519_key.pub", 0o644),
+        ];
+        for (filename, expected_mode) in cases {
+            let mode = fs::metadata(ssh_dir.join(filename))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(mode, expected_mode, "{filename} had wrong permissions");
+        }
     }
 }
