@@ -200,7 +200,6 @@ Each host lives at `hosts/<name>/default.nix`.
   presets = [ "security.sopsDefault" ];
   modules = [ "virtualization.microvm-host" ];
   inputModules = [ "microvm.host" ];
-  ssh.aliases = [ ];
 }
 ```
 
@@ -225,30 +224,6 @@ Supported host fields:
 - `configFile`: Optional path to a host-local override module. Defaults to
   `./configuration.nix`.
 - `configuration`: Optional inline host-local module content.
-- `ssh.aliases`: Optional list overriding generated SSH client aliases for this host.
-  - if omitted, consumers may apply repo-wide defaults from their Nix-owned SSH alias configuration
-  - if set to `[]`, no SSH aliases are generated for the host
-  - if set to a list, consumers should use that list exactly
-
-Example custom SSH alias override:
-
-```nix
-{
-  hostName = "genesis";
-  system = "x86_64-linux";
-  type = "physical";
-
-  presets = [ "installer" ];
-
-  ssh.aliases = [
-    {
-      name = "genesis";
-      user = "root";
-      identityFile = "~/.ssh/installer_key";
-    }
-  ];
-}
-```
 
 ### Layer Selection Rule
 

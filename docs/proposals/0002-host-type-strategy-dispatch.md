@@ -154,7 +154,7 @@ Those runs confirmed:
   `physical` as a temporary default?
 - What file layout should type-specific templates use?
 - Should `provisionTarget` be the only transport field for MicroVM provisioning,
-  or do we eventually want Semble to derive SSH destinations from host aliases?
+  or do we eventually want to add a separate transport abstraction?
 - Do `delete` and `keys` remain type-agnostic, or do we eventually need
   type-specific cleanup behavior?
 

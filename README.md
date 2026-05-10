@@ -68,8 +68,6 @@ Remote target note:
   also works
 - `--builder-policy <name>` selects a strict single-machine build policy from
   `semble.toml` for that invocation
-- machine-level SSH alias installation belongs to the repo's Nix configuration,
-  not to a Semble CLI setup command
 - example:
 
 ```bash
