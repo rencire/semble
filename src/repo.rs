@@ -258,6 +258,80 @@ fn run_nix_eval(paths: &RepoPaths, image_name: &str) -> Result<Option<Vec<u8>>> 
     parse_nix_eval_output(output)
 }
 
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct HostInitrdConfig {
+    pub ip: String,
+    #[serde(rename = "sshPort")]
+    pub ssh_port: u16,
+    #[serde(rename = "bastionIP")]
+    pub bastion_ip: String,
+    #[serde(rename = "requiresJump")]
+    pub requires_jump: bool,
+}
+
+impl HostInitrdConfig {
+    pub fn host_ip(&self) -> &str {
+        self.ip.split('/').next().unwrap_or(&self.ip)
+    }
+}
+
+pub fn load_host_initrd_config(
+    paths: &RepoPaths,
+    host_name: &str,
+) -> Result<HostInitrdConfig> {
+    load_host_initrd_config_with(paths, host_name, run_nix_eval_host_initrd_config)
+}
+
+pub(crate) fn load_host_initrd_config_with(
+    paths: &RepoPaths,
+    host_name: &str,
+    eval: impl FnOnce(&RepoPaths, &str) -> Result<Vec<u8>>,
+) -> Result<HostInitrdConfig> {
+    let stdout = eval(paths, host_name)?;
+    serde_json::from_slice(&stdout)
+        .context("failed to parse initrd config from `nix eval` output")
+}
+
+fn run_nix_eval_host_initrd_config(paths: &RepoPaths, host_name: &str) -> Result<Vec<u8>> {
+    let host_nix = paths.host_dir(host_name).join("host.nix");
+    if !host_nix.exists() {
+        anyhow::bail!(
+            "missing host.nix for `{host_name}`; expected {}",
+            host_nix.display()
+        );
+    }
+    let expr = "h: { ip = h.ip; sshPort = h.initrd.sshPort; bastionIP = h.initrd.bastionIP; requiresJump = h.initrd.requiresJump; }";
+    let output = Command::new("nix")
+        .args([
+            "eval",
+            "--extra-experimental-features",
+            "nix-command",
+            "--json",
+            "--file",
+            &host_nix.to_string_lossy(),
+            "--apply",
+            expr,
+        ])
+        .current_dir(paths.root())
+        .output();
+
+    let output = match output {
+        Ok(output) => output,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            anyhow::bail!("`nix` not found; cannot load initrd config for `{host_name}`")
+        }
+        Err(err) => return Err(err).context("failed to run `nix eval` for initrd config"),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr = stderr.trim();
+        anyhow::bail!("`nix eval` failed for host.nix: {stderr}");
+    }
+
+    Ok(output.stdout)
+}
+
 fn parse_nix_eval_output(output: Output) -> Result<Option<Vec<u8>>> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -277,7 +351,8 @@ fn parse_nix_eval_output(output: Output) -> Result<Option<Vec<u8>>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        load_host_provision_config_with, load_image_prepare_config_with, parse_nix_eval_output,
+        load_host_initrd_config_with, load_host_provision_config_with,
+        load_image_prepare_config_with, parse_nix_eval_output, HostInitrdConfig,
         HostProvisionConfig, HostType, ImagePrepareConfig, RepoPaths,
     };
     use anyhow::anyhow;
@@ -422,5 +497,63 @@ supported_features = ["benchmark", "big-parallel"]
         let policy = paths.builder_policy("l380y").unwrap();
         assert_eq!(policy.host, "l380y-deploy");
         assert_eq!(policy.system, "x86_64-linux");
+    }
+
+    #[test]
+    fn parses_host_initrd_config_from_eval_output() {
+        let tempdir = tempdir().unwrap();
+        write_minimal_semble_toml(tempdir.path());
+        let paths = RepoPaths::new(tempdir.path()).unwrap();
+
+        let config = load_host_initrd_config_with(&paths, "thor", |_paths, _host| {
+            Ok(br#"{"ip":"192.168.0.40/24","sshPort":2222,"bastionIP":"192.168.0.20","requiresJump":true}"#.to_vec())
+        })
+        .unwrap();
+
+        assert_eq!(
+            config,
+            HostInitrdConfig {
+                ip: "192.168.0.40/24".into(),
+                ssh_port: 2222,
+                bastion_ip: "192.168.0.20".into(),
+                requires_jump: true,
+            }
+        );
+    }
+
+    #[test]
+    fn host_ip_strips_cidr_prefix() {
+        let config = HostInitrdConfig {
+            ip: "192.168.0.40/24".into(),
+            ssh_port: 2222,
+            bastion_ip: "192.168.0.20".into(),
+            requires_jump: true,
+        };
+        assert_eq!(config.host_ip(), "192.168.0.40");
+    }
+
+    #[test]
+    fn host_ip_passthrough_when_no_cidr() {
+        let config = HostInitrdConfig {
+            ip: "192.168.0.40".into(),
+            ssh_port: 2222,
+            bastion_ip: "192.168.0.20".into(),
+            requires_jump: false,
+        };
+        assert_eq!(config.host_ip(), "192.168.0.40");
+    }
+
+    #[test]
+    fn initrd_config_eval_failure_propagates() {
+        let tempdir = tempdir().unwrap();
+        write_minimal_semble_toml(tempdir.path());
+        let paths = RepoPaths::new(tempdir.path()).unwrap();
+
+        let error = load_host_initrd_config_with(&paths, "thor", |_paths, _host| {
+            Err(anyhow!("nix eval failed"))
+        })
+        .unwrap_err();
+
+        assert!(error.to_string().contains("nix eval failed"));
     }
 }

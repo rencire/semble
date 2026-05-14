@@ -4,7 +4,7 @@ use crate::keys::{
     generate_initrd_ssh_host_keys, generate_luks_root_key, generate_ssh_host_keys,
     read_public_key_from_dir,
 };
-use crate::repo::RepoPaths;
+use crate::repo::{load_host_initrd_config, RepoPaths};
 use crate::sops::{
     network_rule_aliases, reencrypt_network_yaml, update_sops_yaml_add, update_sops_yaml_delete,
 };
@@ -13,6 +13,7 @@ use anyhow::Result;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HostPresence {
@@ -44,6 +45,54 @@ impl KeyKind {
             KeyKind::Luks => paths.luks_host_keys_dir(hostname),
         }
     }
+}
+
+pub fn run_host_unlock_root(
+    paths: &RepoPaths,
+    hostname: &str,
+    jump: Option<&str>,
+    identity: Option<&str>,
+) -> Result<()> {
+    let initrd = load_host_initrd_config(paths, hostname)?;
+    run_host_unlock_root_with_config(paths, hostname, &initrd, jump, identity)
+}
+
+fn run_host_unlock_root_with_config(
+    paths: &RepoPaths,
+    hostname: &str,
+    initrd: &crate::repo::HostInitrdConfig,
+    jump: Option<&str>,
+    identity: Option<&str>,
+) -> Result<()> {
+    if initrd.requires_jump && jump.is_none() {
+        anyhow::bail!(
+            "`{hostname}` requires a jump host for initrd unlock (initrd.requiresJump = true)\n\
+             Pass --jump <alias>, e.g.: semble host unlock-root {hostname} --jump vishnu-admin"
+        );
+    }
+
+    let key_file = paths.luks_host_keys_dir(hostname).join("luks-root.key");
+    if !key_file.exists() {
+        anyhow::bail!("LUKS key not found: {}", key_file.display());
+    }
+
+    let mut cmd = Command::new("ssh");
+    cmd.arg("-T");
+    if let Some(id) = identity {
+        cmd.args(["-i", id]);
+    }
+    if let Some(j) = jump {
+        cmd.args(["-J", j]);
+    }
+    cmd.args(["-p", &initrd.ssh_port.to_string()]);
+    cmd.arg(format!("root@{}", initrd.host_ip()));
+    cmd.stdin(std::fs::File::open(&key_file)?);
+
+    let status = cmd.status()?;
+    if !status.success() {
+        anyhow::bail!("ssh exited with status {status}");
+    }
+    Ok(())
 }
 
 pub fn validate_hostname(hostname: &str) -> Result<()> {
@@ -589,9 +638,10 @@ mod tests {
     use super::KeyKind;
     use super::{
         assert_hostname_exists_for_delete, assert_hostname_is_new, create_summary_text,
-        host_presence, keys_summary_text, run_host_key_add, run_host_key_delete, validate_hostname,
+        host_presence, keys_summary_text, run_host_key_add, run_host_key_delete,
+        run_host_unlock_root_with_config, validate_hostname,
     };
-    use crate::repo::RepoPaths;
+    use crate::repo::{HostInitrdConfig, RepoPaths};
     use std::fs;
     use tempfile::tempdir;
 
@@ -749,5 +799,64 @@ creation_rules:
 
         run_host_key_delete(&paths, hostname, KeyKind::Luks, true).unwrap();
         assert!(!keys_dir.exists());
+    }
+
+    fn make_initrd_config(requires_jump: bool) -> HostInitrdConfig {
+        HostInitrdConfig {
+            ip: "192.168.0.40/24".into(),
+            ssh_port: 2222,
+            bastion_ip: "192.168.0.20".into(),
+            requires_jump,
+        }
+    }
+
+    #[test]
+    fn unlock_root_errors_when_jump_required_but_not_provided() {
+        let (_tempdir, paths) = setup_repo();
+        let initrd = make_initrd_config(true);
+
+        let error = run_host_unlock_root_with_config(&paths, "thor", &initrd, None, None)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("requires a jump host"));
+        assert!(error.contains("--jump"));
+    }
+
+    #[test]
+    fn unlock_root_errors_when_luks_key_missing() {
+        let (_tempdir, paths) = setup_repo();
+        let initrd = make_initrd_config(false);
+
+        let error = run_host_unlock_root_with_config(&paths, "thor", &initrd, None, None)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("LUKS key not found"));
+    }
+
+    #[test]
+    fn unlock_root_jump_required_takes_priority_over_missing_key() {
+        let (_tempdir, paths) = setup_repo();
+        let initrd = make_initrd_config(true);
+
+        let error = run_host_unlock_root_with_config(&paths, "thor", &initrd, None, None)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("requires a jump host"));
+    }
+
+    #[test]
+    fn unlock_root_proceeds_past_jump_check_when_jump_provided() {
+        let (_tempdir, paths) = setup_repo();
+        let initrd = make_initrd_config(true);
+
+        let error =
+            run_host_unlock_root_with_config(&paths, "thor", &initrd, Some("vishnu-admin"), None)
+                .unwrap_err()
+                .to_string();
+
+        assert!(error.contains("LUKS key not found"), "expected key error, got: {error}");
     }
 }

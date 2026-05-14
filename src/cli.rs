@@ -28,6 +28,19 @@ pub enum HostCommand {
     Build(DelegatedHostArgs),
     Switch(DelegatedHostArgs),
     Provision(HostProvisionArgs),
+    UnlockRoot(UnlockRootArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct UnlockRootArgs {
+    pub hostname: String,
+    /// SSH ProxyJump alias for reaching the host's initrd SSH (e.g. vishnu-admin).
+    /// Required when the host's initrd.requiresJump is true.
+    #[arg(long)]
+    pub jump: Option<String>,
+    /// SSH identity file. Defaults to the SSH agent / default key.
+    #[arg(long)]
+    pub identity: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -289,6 +302,69 @@ mod tests {
             let result = Cli::try_parse_from(args);
             assert!(result.is_ok(), "failed to parse image prepare command");
         }
+    }
+
+    #[test]
+    fn parses_unlock_root_commands() {
+        let cases = [
+            vec!["semble", "host", "unlock-root", "thor"],
+            vec!["semble", "host", "unlock-root", "thor", "--jump", "vishnu-admin"],
+            vec![
+                "semble",
+                "host",
+                "unlock-root",
+                "thor",
+                "--jump",
+                "vishnu-admin",
+                "--identity",
+                "~/.ssh/homelab_admin",
+            ],
+        ];
+
+        for args in cases {
+            let result = Cli::try_parse_from(args);
+            assert!(result.is_ok(), "failed to parse unlock-root command: {result:?}");
+        }
+    }
+
+    #[test]
+    fn unlock_root_captures_optional_flags() {
+        use super::{Command, HostCommand};
+
+        let cli = Cli::try_parse_from([
+            "semble",
+            "host",
+            "unlock-root",
+            "thor",
+            "--jump",
+            "vishnu-admin",
+            "--identity",
+            "~/.ssh/homelab_admin",
+        ])
+        .unwrap();
+
+        let Command::Host(host) = cli.command else { panic!("expected Host") };
+        let HostCommand::UnlockRoot(args) = host.command else {
+            panic!("expected UnlockRoot");
+        };
+        assert_eq!(args.hostname, "thor");
+        assert_eq!(args.jump.as_deref(), Some("vishnu-admin"));
+        assert_eq!(args.identity.as_deref(), Some("~/.ssh/homelab_admin"));
+    }
+
+    #[test]
+    fn unlock_root_jump_and_identity_default_to_none() {
+        use super::{Command, HostCommand};
+
+        let cli = Cli::try_parse_from(["semble", "host", "unlock-root", "thor"]).unwrap();
+
+        let Command::Host(host) = cli.command else { panic!("expected Host") };
+        let HostCommand::UnlockRoot(args) = host.command else {
+            panic!("expected UnlockRoot");
+        };
+        assert_eq!(args.hostname, "thor");
+        assert!(args.jump.is_none());
+        assert!(args.identity.is_none());
     }
 
 }

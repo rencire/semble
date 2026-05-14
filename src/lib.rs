@@ -14,6 +14,7 @@ pub mod template;
 use anyhow::Result;
 use cli::{
     Cli, Command, HostCommand, ImageCommand, KeyActionCommand, KeysCommand, SshKeyActionCommand,
+    UnlockRootArgs,
 };
 
 pub fn run(cli: Cli) -> Result<()> {
@@ -53,6 +54,11 @@ pub fn run(cli: Cli) -> Result<()> {
                     args.skip_reencrypt,
                     args.sops_key_file.as_deref(),
                 )
+            }
+            HostCommand::UnlockRoot(UnlockRootArgs { hostname, jump, identity }) => {
+                let paths = repo::RepoPaths::new(std::env::current_dir()?)?;
+                host::validate_hostname(&hostname)?;
+                host::run_host_unlock_root(&paths, &hostname, jump.as_deref(), identity.as_deref())
             }
             HostCommand::Keys(args) => {
                 let paths = repo::RepoPaths::new(std::env::current_dir()?)?;
