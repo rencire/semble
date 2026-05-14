@@ -9,7 +9,7 @@
 
 rustPlatform.buildRustPackage {
   pname = "semble";
-  version = "0.6.0";
+  version = "0.7.0";
 
   src = lib.cleanSource ../..;
   cargoLock = {
@@ -24,10 +24,12 @@ rustPlatform.buildRustPackage {
 
   postInstall = ''
     wrapProgram $out/bin/semble \
-      --prefix PATH : ${lib.makeBinPath [
-        coreutils
-        openssh
-      ]}
+      --prefix PATH : ${
+        lib.makeBinPath [
+          coreutils
+          openssh
+        ]
+      }
   '';
 
   meta = {
