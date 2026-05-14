@@ -67,7 +67,7 @@ fn run_host_unlock_root_with_config(
     if initrd.requires_jump && jump.is_none() {
         anyhow::bail!(
             "`{hostname}` requires a jump host for initrd unlock (initrd.requiresJump = true)\n\
-             Pass --jump <alias>, e.g.: semble host unlock-root {hostname} --jump vishnu-admin"
+             Pass --jump <alias>, e.g.: semble host unlock-root {hostname} --jump <host>-admin"
         );
     }
 

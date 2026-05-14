@@ -34,7 +34,7 @@ pub enum HostCommand {
 #[derive(Debug, Args)]
 pub struct UnlockRootArgs {
     pub hostname: String,
-    /// SSH ProxyJump alias for reaching the host's initrd SSH (e.g. vishnu-admin).
+    /// SSH ProxyJump alias for reaching the host's initrd SSH (e.g. <host>-admin).
     /// Required when the host's initrd.requiresJump is true.
     #[arg(long)]
     pub jump: Option<String>,
