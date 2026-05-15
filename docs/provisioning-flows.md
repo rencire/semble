@@ -124,6 +124,18 @@ In the physical-host case, the target is a remote machine.
 4. `nixos-install` installs into the mounted target filesystem.
 5. The machine is then rebooted into the new system.
 
+## Operational Caveats
+
+### Tailscale Hostname Collisions
+
+The installer image joins Tailscale with a fixed hostname (e.g. `installer`).
+We currently assume only one installer is active at a time in the homelab.
+
+If you reuse the same USB image on a different computer, remove the old
+installer entry from the Tailscale admin console first. Otherwise Tailscale
+auto-appends a suffix (e.g. `installer-1`, `installer-2`) to disambiguate the
+duplicate hostname, which can cause connectivity issues during provisioning.
+
 ## Why This Matters
 
 The flows share a broad structure, but the provisioning target is different:

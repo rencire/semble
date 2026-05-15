@@ -16,6 +16,8 @@ Typical commands:
 ```bash
 # scaffold a new host directory and SSH host keys
 semble host create my-host
+# build a raw disk image and inject SSH host keys for first-boot provisioning
+semble image prepare my-image --keys-dir ./ssh_host_keys/my-host
 # remove a host scaffold and related generated material
 semble host delete my-host --yes
 # build and switch a host configuration, prompting before activation
@@ -43,6 +45,15 @@ Command behavior summary:
     Semble flags; physical: passthrough to nixos-anywhere)
   - MicroVM-only options: `--system-store-path`, `--no-encrypt`, and
     `--force-reformat`
+- `semble image prepare <image> [--keys-dir <dir>] [--output <path>] [--device <dev>] [--skip-inject]`
+  builds a raw disk image from the flake, optionally injects SSH host keys into
+  `/etc/ssh/` before first boot, and optionally flashes it to a block device
+  - requires `prepare.partitionLabel` in the image's NixOS definition
+  - `--keys-dir <dir>`: path to SSH host keys to inject (typically
+    `ssh_host_keys/<host>`)
+  - `--output <path>`: output image path (defaults to derived artifact path)
+  - `--device <dev>`: block device to flash the image to after building
+  - `--skip-inject`: build and write the image without injecting SSH keys
 - `semble host keys ssh add|delete <host>` manages repository SSH host keys
 - `semble host keys initrd-ssh add|delete <host>` manages initrd SSH host keys
 - `semble host keys luks add|delete <host>` manages encrypted-root unlock keys
