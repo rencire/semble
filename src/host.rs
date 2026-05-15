@@ -2,7 +2,8 @@ use crate::confirm::require_delete_confirmation;
 use crate::error::fail;
 use crate::keys::{
     generate_initrd_ssh_host_keys, generate_luks_root_key, generate_ssh_host_keys,
-    read_public_key_from_dir,
+    read_public_key_from_dir, INITRD_SSH_PRIVATE_KEY_FILENAME, INITRD_SSH_PUBLIC_KEY_FILENAME,
+    LUKS_ROOT_KEY_FILENAME, SSH_PRIVATE_KEY_FILENAME, SSH_PUBLIC_KEY_FILENAME,
 };
 use crate::repo::{load_host_initrd_config, RepoPaths};
 use crate::sops::{
@@ -41,8 +42,18 @@ impl KeyKind {
     fn dir(self, paths: &RepoPaths, hostname: &str) -> std::path::PathBuf {
         match self {
             KeyKind::Ssh => paths.host_keys_dir(hostname),
-            KeyKind::InitrdSsh => paths.initrd_host_keys_dir(hostname),
+            KeyKind::InitrdSsh => paths.host_keys_dir(hostname),
             KeyKind::Luks => paths.luks_host_keys_dir(hostname),
+        }
+    }
+
+    fn file_names(self) -> &'static [&'static str] {
+        match self {
+            KeyKind::Ssh => &[SSH_PRIVATE_KEY_FILENAME, SSH_PUBLIC_KEY_FILENAME],
+            KeyKind::InitrdSsh => {
+                &[INITRD_SSH_PRIVATE_KEY_FILENAME, INITRD_SSH_PUBLIC_KEY_FILENAME]
+            }
+            KeyKind::Luks => &[LUKS_ROOT_KEY_FILENAME],
         }
     }
 }
@@ -71,7 +82,7 @@ fn run_host_unlock_root_with_config(
         );
     }
 
-    let key_file = paths.luks_host_keys_dir(hostname).join("luks-root.key");
+    let key_file = paths.luks_host_keys_dir(hostname).join(LUKS_ROOT_KEY_FILENAME);
     if !key_file.exists() {
         anyhow::bail!("LUKS key not found: {}", key_file.display());
     }
@@ -257,7 +268,15 @@ pub fn run_host_key_delete(
         assume_yes,
     )?;
     if dir.exists() {
-        fs::remove_dir_all(&dir)?;
+        for file_name in kind.file_names() {
+            let path = dir.join(file_name);
+            if path.exists() {
+                fs::remove_file(path)?;
+            }
+        }
+        if dir.read_dir()?.next().is_none() {
+            fs::remove_dir_all(&dir)?;
+        }
         println!("Deleted {label}: {} (yes)", relative_to_root(paths, &dir));
     } else {
         println!(
@@ -650,7 +669,6 @@ hosts_dir = "hosts"
 host_template_dir = "hosts/_template"
 default_host_template = "default"
 ssh_host_keys_dir = "ssh_host_keys"
-initrd_ssh_host_keys_dir = "initrd_ssh_host_keys"
 disk_keys_dir = "disk_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"
@@ -775,17 +793,35 @@ creation_rules:
     }
 
     #[test]
-    fn initrd_key_add_and_delete_use_repository_directories() {
+    fn initrd_key_add_and_delete_use_shared_repository_directory() {
         let (_tempdir, paths) = setup_repo();
         let hostname = "atlas";
 
         run_host_key_add(&paths, hostname, KeyKind::InitrdSsh, true).unwrap();
-        let keys_dir = paths.initrd_host_keys_dir(hostname);
-        assert!(keys_dir.join("ssh_host_ed25519_key").exists());
-        assert!(keys_dir.join("ssh_host_ed25519_key.pub").exists());
+        let keys_dir = paths.host_keys_dir(hostname);
+        assert!(keys_dir.join("initrd_ssh_host_ed25519_key").exists());
+        assert!(keys_dir.join("initrd_ssh_host_ed25519_key.pub").exists());
 
         run_host_key_delete(&paths, hostname, KeyKind::InitrdSsh, true).unwrap();
         assert!(!keys_dir.exists());
+    }
+
+    #[test]
+    fn initrd_key_delete_preserves_normal_ssh_keys_in_shared_directory() {
+        let (_tempdir, paths) = setup_repo();
+        let hostname = "atlas";
+
+        run_host_key_add(&paths, hostname, KeyKind::Ssh, true).unwrap();
+        run_host_key_add(&paths, hostname, KeyKind::InitrdSsh, false).unwrap();
+
+        let keys_dir = paths.host_keys_dir(hostname);
+        run_host_key_delete(&paths, hostname, KeyKind::InitrdSsh, true).unwrap();
+
+        assert!(keys_dir.exists());
+        assert!(keys_dir.join("ssh_host_ed25519_key").exists());
+        assert!(keys_dir.join("ssh_host_ed25519_key.pub").exists());
+        assert!(!keys_dir.join("initrd_ssh_host_ed25519_key").exists());
+        assert!(!keys_dir.join("initrd_ssh_host_ed25519_key.pub").exists());
     }
 
     #[test]

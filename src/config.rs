@@ -16,7 +16,6 @@ pub struct PathsConfig {
     pub host_template_dir: PathBuf,
     pub default_host_template: String,
     pub ssh_host_keys_dir: PathBuf,
-    pub initrd_ssh_host_keys_dir: PathBuf,
     pub disk_keys_dir: PathBuf,
     pub sops_config_file: PathBuf,
     pub network_secrets_file: PathBuf,
@@ -72,7 +71,6 @@ hosts_dir = "hosts"
 host_template_dir = "hosts/_template"
 default_host_template = "default"
 ssh_host_keys_dir = "ssh_host_keys"
-initrd_ssh_host_keys_dir = "initrd_ssh_host_keys"
 disk_keys_dir = "disk_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"

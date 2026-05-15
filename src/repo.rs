@@ -42,14 +42,6 @@ impl RepoPaths {
         self.ssh_keys_dir().join(hostname)
     }
 
-    pub fn initrd_ssh_keys_dir(&self) -> PathBuf {
-        self.root.join(&self.config.paths.initrd_ssh_host_keys_dir)
-    }
-
-    pub fn initrd_host_keys_dir(&self, hostname: &str) -> PathBuf {
-        self.initrd_ssh_keys_dir().join(hostname)
-    }
-
     pub fn disk_keys_dir(&self) -> PathBuf {
         self.root.join(&self.config.paths.disk_keys_dir)
     }
@@ -371,7 +363,6 @@ hosts_dir = "hosts"
 host_template_dir = "hosts/_template"
 default_host_template = "default"
 ssh_host_keys_dir = "ssh_host_keys"
-initrd_ssh_host_keys_dir = "initrd_ssh_host_keys"
 disk_keys_dir = "disk_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"
@@ -477,7 +468,6 @@ hosts_dir = "hosts"
 host_template_dir = "hosts/_template"
 default_host_template = "default"
 ssh_host_keys_dir = "ssh_host_keys"
-initrd_ssh_host_keys_dir = "initrd_ssh_host_keys"
 disk_keys_dir = "disk_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"

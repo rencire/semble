@@ -18,7 +18,6 @@ fn parse_error_names_missing_field() {
 hosts_dir = "hosts"
 host_template_dir = "hosts/templates"
 ssh_host_keys_dir = "ssh_host_keys"
-initrd_ssh_host_keys_dir = "initrd_ssh_host_keys"
 sops_config_file = ".sops.yaml"
 network_secrets_file = "secrets/network.yaml"
 "#,
