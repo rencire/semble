@@ -1,11 +1,11 @@
 { inputs, ... }:
 let
-  theLib = import ./semble-lib { nixpkgs = inputs.nixpkgs; };
+  sembleLib = import ./semble-lib { nixpkgs = inputs.nixpkgs; };
 in
 {
   api = pkgs: pkgs.writeText "semble-api-tests" (
     builtins.toJSON (import ./tests {
-      sembleLib = theLib;
+      inherit sembleLib;
       nixpkgs = inputs.nixpkgs;
     })
   );
