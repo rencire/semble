@@ -9,10 +9,13 @@ Semble uses Conventional Commits and git tags to drive releases.
 - `feat` commits bump the minor version.
 - `fix` commits bump the patch version.
 - Breaking changes marked with `!` or `BREAKING CHANGE:` bump the major version.
-- `docs`, `test`, `chore`, and `refactor` commits do not affect the release version.
+- `docs`, `test`, `chore`, and `refactor` commits do not affect the release
+  version.
 - No prereleases by default.
 
-Main should stay buildable, but it may include integration work when that work is intentionally part of the release train. Breaking changes are allowed when they are explicitly marked and intentionally released.
+Main should stay buildable, but it may include integration work when that work
+is intentionally part of the release train. Breaking changes are allowed when
+they are explicitly marked and intentionally released.
 
 The release process should keep versioned metadata in sync for whatever package
 or language ecosystem the repo uses.
@@ -24,10 +27,10 @@ Examples:
 - Python packages: `pyproject.toml`, `setup.cfg`, or wheel/sdist metadata
 - Go modules: `go.mod` and any release tags or generated module docs
 
-When a release needs explicit version metadata, prefer a dedicated release commit
-before the tag rather than bumping versions in every normal development commit.
-That keeps day-to-day commits focused on code changes while still making the
-released state explicit.
+When a release needs explicit version metadata, prefer a dedicated release
+commit before the tag rather than bumping versions in every normal development
+commit. That keeps day-to-day commits focused on code changes while still making
+the released state explicit.
 
 ```mermaid
 flowchart LR

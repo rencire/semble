@@ -60,10 +60,10 @@ let
   stripNixExtension = name: lib.removeSuffix ".nix" name;
 
   collectTree =
-    {
-      dir,
-      includeFile,
-      prefix ? "",
+    { dir
+    , includeFile
+    , prefix ? ""
+    ,
     }:
     if !builtins.pathExists dir then
       [ ]
@@ -72,34 +72,37 @@ let
         entries = builtins.readDir dir;
         names = lib.sort builtins.lessThan (builtins.attrNames entries);
       in
-      lib.concatMap (
-        name:
-        let
-          entryType = entries.${name};
-          child = dir + "/${name}";
-          relativePath = if prefix == "" then name else "${prefix}/${name}";
-        in
-        if entryType == "directory" then
-          collectTree {
-            dir = child;
-            inherit includeFile;
-            prefix = relativePath;
-          }
-        else if entryType == "regular" && includeFile name relativePath then
-          [
-            {
-              path = child;
-              inherit relativePath;
-            }
-          ]
-        else
-          [ ]
-      ) names;
+      lib.concatMap
+        (
+          name:
+          let
+            entryType = entries.${name};
+            child = dir + "/${name}";
+            relativePath = if prefix == "" then name else "${prefix}/${name}";
+          in
+          if entryType == "directory" then
+            collectTree
+              {
+                dir = child;
+                inherit includeFile;
+                prefix = relativePath;
+              }
+          else if entryType == "regular" && includeFile name relativePath then
+            [
+              {
+                path = child;
+                inherit relativePath;
+              }
+            ]
+          else
+            [ ]
+        )
+        names;
 
   deriveKey =
-    {
-      kind,
-      relativePath,
+    { kind
+    , relativePath
+    ,
     }:
     let
       parts = lib.splitString "/" relativePath;

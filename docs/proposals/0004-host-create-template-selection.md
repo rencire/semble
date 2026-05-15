@@ -4,7 +4,8 @@ Status: `accepted`
 
 ## Summary
 
-Allow `host create` to choose a template by name while keeping a required default template in repo config.
+Allow `host create` to choose a template by name while keeping a required
+default template in repo config.
 
 The default behavior stays explicit:
 
@@ -15,7 +16,8 @@ The default behavior stays explicit:
 
 Semble currently assumes one host template layout for every created host.
 
-That works while all hosts share one starter shape, but it becomes too rigid once repos want different scaffolds for different host families.
+That works while all hosts share one starter shape, but it becomes too rigid
+once repos want different scaffolds for different host families.
 
 ## Proposed Change
 
@@ -29,7 +31,8 @@ Preferred shape:
 Behavior:
 
 - If `--template` is omitted, Semble uses the configured default template name.
-- If `--template` is provided, Semble resolves the named template relative to the configured host template root.
+- If `--template` is provided, Semble resolves the named template relative to
+  the configured host template root.
 - Template names are repo-defined and arbitrary.
 - Semble does not persist a template marker in the generated host definition.
 
@@ -65,9 +68,12 @@ Resolution rules:
 
 Before merging, validate these cases:
 
-1. `host create <host>` uses `default_host_template` when `--template` is omitted.
-2. `host create <host> --template <name>` resolves the named template under `host_template_dir`.
-3. `host create <host> --template <missing>` fails clearly before creating the host directory.
+1. `host create <host>` uses `default_host_template` when `--template` is
+   omitted.
+2. `host create <host> --template <name>` resolves the named template under
+   `host_template_dir`.
+3. `host create <host> --template <missing>` fails clearly before creating the
+   host directory.
 
 ## Open Questions
 

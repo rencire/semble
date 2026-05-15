@@ -23,4 +23,3 @@ especially one that affects:
 - composition semantics
 - layering rules
 - other durable structural boundaries
-

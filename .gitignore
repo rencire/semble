@@ -1,29 +1,264 @@
+# =============================================================
+# OS — macOS
+# =============================================================
+
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# =============================================================
+# OS — Linux
+# =============================================================
+
+.Trash-*
+# NFS lock files
+.nfs*
+# KDE/Dolphin folder settings
+.directory
+
+# =============================================================
+# OS — Windows
+# =============================================================
+
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# =============================================================
+# Editors — Vim / Neovim
+# =============================================================
+
+*.swp
+*.swo
+*.swn
+*~
+.netrwhist
+Session.vim
+# ctags / universal-ctags
+tags
+.tags
+
+# =============================================================
+# Editors — Emacs
+# =============================================================
+
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+.org-id-locations
+
+# =============================================================
+# Editors — VS Code
+# =============================================================
+
+# .vscode/ is debated — extensions.json and settings.json
+# are often committed for team consistency.
+# Ignore only the personal/local files:
+.vscode/settings.json
+.vscode/*.code-workspace
+# often machine-specific paths
+.vscode/launch.json
+# Local History extension
+.history/
+
+# =============================================================
+# Editors — JetBrains (IntelliJ, CLion, etc.)
+# =============================================================
+
+# .idea/ is debated — some files are worth committing.
+# The safe ignore-only list:
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/usage.statistics.xml
+.idea/**/dictionaries
+.idea/**/shelf
+.idea/**/httpRequests
+.idea/**/dataSources/
+.idea/**/dataSources.ids
+.idea/**/dataSources.local.xml
+.idea/**/sqlDataSources.xml
+.idea/**/dynamic.xml
+.idea/**/uiDesigner.xml
+.idea/**/dbnavigator.xml
+.idea/**/gradle.xml
+.idea/caches/
+*.iws
+out/
+
+# =============================================================
+# Editors — Helix
+# =============================================================
+
+# Helix writes no project-level files — nothing to ignore.
+# Session/history lives in ~/.cache/helix/
+
+# =============================================================
+# General temp / crash files
+# =============================================================
+
+*.tmp
+*.temp
+*.bak
+*.orig
+# patch reject files
+*.rej
+*.log
+# core dumps
+core
+core.*
+# Valgrind
+vgcore.*
+*.pid
+*.seed
+*.stackdump
+
+# =============================================================
+# Secrets & keys — never commit these
+# =============================================================
+
+# Generic secret files
+.env
+.env.*
+!.env.example
+!.env.template
+
+# Private keys (various formats)
+*.pem
+*.key
+*.p12
+*.pfx
+*.p8
+*.der
+
+# SSH
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+id_ecdsa
+id_ecdsa.*
+# optional — pub keys are safe, but some prefer to keep the pair together and ignore both
+*.pub
+
+# GPG / age
+*.gpg
+secring.*
+trustdb.gpg
+# *.age             # don't ignore — age files are the encrypted form,
+                    # safe to commit (what sops-nix produces)
+
+# Certificates
+*.crt
+*.cer
+*.ca-bundle
+
+# API keys / tokens / credentials files
+*credentials*
+*token*
+*secret*
+*.secrets
+auth.json
+credentials.json
+# GCP service accounts
+service-account*.json
+
+# AWS
+# .aws/config is usually safe to commit
+.aws/credentials
+*.aws
+
+# Vault / sops
+# *.enc.yaml → safe to commit (encrypted by sops)
+# secrets.yaml (plaintext) → never commit
+secrets.yaml
+secrets.json
+secrets.toml
+# decrypted output files
+*.dec
+
+# HashiCorp Vault tokens
+.vault-token
+
+# kubeconfig (contains cluster credentials)
+kubeconfig
+kubeconfig.*
+*.kubeconfig
+# $KUBECONFIG is often ~/.kube/config, but if in-repo, ignore it
+
+# Terraform
+# often contains secrets
+*.tfvars
+# *.tfvars.json       # same
+# terraform.tfstate   # contains sensitive resource data
+# .terraform/         # local plugin cache, not secrets but large
+
+# JWTs / bearer tokens in files
+*.jwt
+
+# =============================================================
 # Nix
-/result
-/result-*
-/target/
+# =============================================================
+
+# Build outputs — symlinks nix build creates in the project root
+result
+result-*
+
+# =============================================================
+# direnv
+# =============================================================
+
+# Local direnv cache — machine-specific, rebuilt automatically
 .direnv/
 
-# macOS
-.DS_Store
+# .envrc — debated, but generally commit it if it just says
+# "use flake" or "use devenv"; ignore if it has personal env vars.
+# Common pattern: commit .envrc, gitignore .envrc.local
+.envrc.local
 
-# Editor temp files
-*~
-.*.swp
+# =============================================================
+# AI agent — auto-generated by `nix run .#setup-entire`
+# =============================================================
 
-# Agent tools
-.aider
 .aider.*
+.aider
 .aider*/
 
+.claude/
+.codex/
+.cursor/
+.factory/
+.gemini/
+.kiro/
+.agents/
+.opencode/
+.github/hooks/
+.gstack/
+
+.claude/settings.local.json
+CLAUDE.local.md
+
+# =============================================================
+# Rust
+# =============================================================
+
+/target/
+
+# =============================================================
 # Local VCS
+# =============================================================
+
 .jj/
-
-
-
-# Agent
-.agents/skills/
-.claude/skills/
-
-# Never commit private keys
-*.key

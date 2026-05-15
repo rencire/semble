@@ -3,6 +3,7 @@
 `semble` is a repo-aware host management CLI.
 
 It expects the target repo to define a root-level `semble.toml` that specifies:
+
 - repo paths such as `hosts/`, `ssh_host_keys/`, and `.sops.yaml`
 - the host template location
 - command-time orchestration settings such as builder policies
@@ -28,43 +29,46 @@ semble host provision my-vm --disk-encryption-keys ./secrets/my-vm-root.key
 ```
 
 Command behavior summary:
-- `semble host build <host> [extra args...]`
-  runs `nh os build . -H <host> [extra args...]`
-- `semble host switch <host> [extra args...]`
-  runs `nh os switch . -H <host> [extra args...]`
-- `semble host provision <host> [extra args...]`
-  for physical hosts: runs `nixos-anywhere --flake .#<host> --target-host <host> [extra args...]`
+
+- `semble host build <host> [extra args...]` runs
+  `nh os build . -H <host> [extra args...]`
+- `semble host switch <host> [extra args...]` runs
+  `nh os switch . -H <host> [extra args...]`
+- `semble host provision <host> [extra args...]` for physical hosts: runs
+  `nixos-anywhere --flake .#<host> --target-host <host> [extra args...]`
   - common option: `--builder-policy <name>`
   - physical-host passthrough: trailing args forwarded to `nixos-anywhere`,
     including `--target-host`, `--host-keys-dir`, `--disk-encryption-keys`
-  - options for both: `--disk-encryption-keys`, `--host-keys-dir`
-    (MicroVM: Semble flags; physical: passthrough to nixos-anywhere)
-  - MicroVM-only options: `--system-store-path`, `--no-encrypt`, and `--force-reformat`
+  - options for both: `--disk-encryption-keys`, `--host-keys-dir` (MicroVM:
+    Semble flags; physical: passthrough to nixos-anywhere)
+  - MicroVM-only options: `--system-store-path`, `--no-encrypt`, and
+    `--force-reformat`
 - `semble host keys ssh add|delete <host>` manages repository SSH host keys
 - `semble host keys initrd-ssh add|delete <host>` manages initrd SSH host keys
 - `semble host keys luks add|delete <host>` manages encrypted-root unlock keys
-- `semble host provision <host> [extra args...]`
-  resolves the guest's `microvm.volumes` configuration, creates or formats the
-  root image on the parent host, copies the built system closure to the parent,
-  installs into the mounted root, optionally copies SSH host keys into
-  `/etc/ssh/`, validates the installed guest system, and restarts the MicroVM
-  on the parent host
-  - options for both: `--disk-encryption-keys`, `--host-keys-dir`
-    (MicroVM: Semble flags; physical: passthrough to nixos-anywhere)
-  - MicroVM-only options: `--system-store-path`, `--no-encrypt`, and `--force-reformat`
-  - `--disk-encryption-keys` is required for encrypted MicroVM provisioning;
-    for physical hosts, pass it after the hostname to forward to nixos-anywhere
+- `semble host provision <host> [extra args...]` resolves the guest's
+  `microvm.volumes` configuration, creates or formats the root image on the
+  parent host, copies the built system closure to the parent, installs into the
+  mounted root, optionally copies SSH host keys into `/etc/ssh/`, validates the
+  installed guest system, and restarts the MicroVM on the parent host
+  - options for both: `--disk-encryption-keys`, `--host-keys-dir` (MicroVM:
+    Semble flags; physical: passthrough to nixos-anywhere)
+  - MicroVM-only options: `--system-store-path`, `--no-encrypt`, and
+    `--force-reformat`
+  - `--disk-encryption-keys` is required for encrypted MicroVM provisioning; for
+    physical hosts, pass it after the hostname to forward to nixos-anywhere
   - encrypted provisioning uses the `cryptroot` mapper name by default
 
 Remote target note:
+
 - `host switch` does not currently infer a remote deploy alias on its own
 - for remote NixOS deployment, pass `--target-host` explicitly
 - when `--target-host` is present, Semble now injects
   `--elevation-strategy passwordless` unless you already set an explicit
   elevation strategy
 - `my-host-deploy` in the examples is an SSH host alias
-- a normal SSH target such as `deploy@my-host.example.com` or `deploy@192.168.0.40`
-  also works
+- a normal SSH target such as `deploy@my-host.example.com` or
+  `deploy@192.168.0.40` also works
 - `--builder-policy <name>` selects a strict single-machine build policy from
   `semble.toml` for that invocation
 - example:

@@ -5,10 +5,10 @@ let
 in
 {
   mkFlake =
-    {
-      inputs,
-      root,
-      overlays ? [ ],
+    { inputs
+    , root
+    , overlays ? [ ]
+    ,
     }:
     let
       project = discoverProject { inherit inputs root; };
@@ -44,35 +44,41 @@ in
       nixosConfigurations = lib.mapAttrs buildHost nixosHosts;
       darwinConfigurations = lib.mapAttrs buildHost darwinHosts;
 
-      images = lib.mapAttrs (
-        key: _:
-        (resolveImage {
-          inherit project key overlays;
-        }).build
-      ) project.imagesByKey;
+      images = lib.mapAttrs
+        (
+          key: _:
+            (resolveImage {
+              inherit project key overlays;
+            }).build
+        )
+        project.imagesByKey;
 
       _semble = {
-        images = lib.mapAttrs (
-          key: _:
-          let
-            resolvedImage = resolveImage {
-              inherit project key;
-            };
-          in
-          {
-            sourceHost = resolvedImage.image.sourceHost;
-            buildOutput = resolvedImage.image.buildOutput;
-            prepare = resolvedImage.image.prepare;
-          }
-        ) project.imagesByKey;
-        hosts = lib.mapAttrs (
-          key: host:
-          {
-            inherit (host) system;
-            type = host.type;
-            provisionTarget = host.provisionTarget or null;
-          }
-        ) project.hostsByKey;
+        images = lib.mapAttrs
+          (
+            key: _:
+              let
+                resolvedImage = resolveImage {
+                  inherit project key;
+                };
+              in
+              {
+                sourceHost = resolvedImage.image.sourceHost;
+                buildOutput = resolvedImage.image.buildOutput;
+                prepare = resolvedImage.image.prepare;
+              }
+          )
+          project.imagesByKey;
+        hosts = lib.mapAttrs
+          (
+            key: host:
+              {
+                inherit (host) system;
+                type = host.type;
+                provisionTarget = host.provisionTarget or null;
+              }
+          )
+          project.hostsByKey;
       };
     };
 }

@@ -141,7 +141,7 @@ in
   hostTypeIsPreserved = assert (resolved.host.type == "physical"); true;
   defaultHostNameWins = assert (beaconConfig.networking.hostName == "beacon"); true;
   missingDefaultConfigIsEmpty = assert (beaconConfig.environment.variables.SEMBLE_MESSAGE == "from-preset"); true;
-  presetValuesApply = assert (hostConfig.services.openssh.hostKeys == [ { path = "/preset/key"; type = "rsa"; } ]); true;
+  presetValuesApply = assert (hostConfig.services.openssh.hostKeys == [{ path = "/preset/key"; type = "rsa"; }]); true;
   upstreamInputsApply = assert (hostConfig.environment.variables.FAKE_INPUT == "enabled"); true;
   presetInputModulesApply = assert (hostConfig.environment.variables.FAKE_BUNDLE == "enabled"); true;
   hostInputModulesApply = assert (hostConfig.environment.variables.FAKE_DIRECT == "enabled"); true;

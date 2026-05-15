@@ -15,10 +15,10 @@ let
       fileError file "unknown ${kind} `${key}`";
 
   resolveInputRef =
-    {
-      inputs,
-      file,
-      ref,
+    { inputs
+    , file
+    , ref
+    ,
     }:
     let
       parts = lib.splitString "." ref;
@@ -42,10 +42,10 @@ let
       fileError file "input `${inputName}` does not expose nixosModules.${moduleName}";
 
   resolveBuilderRef =
-    {
-      inputs,
-      file,
-      ref,
+    { inputs
+    , file
+    , ref
+    ,
     }:
     let
       parts = lib.splitString "." ref;
@@ -64,11 +64,11 @@ let
       fileError file "input `${inputName}` does not expose `${joinDot attrPath}`";
 
   resolveAttrRef =
-    {
-      file,
-      root,
-      ref,
-      label,
+    { file
+    , root
+    , ref
+    , label
+    ,
     }:
     let
       parts = lib.splitString "." ref;
@@ -80,9 +80,9 @@ let
       fileError file "${label} `${ref}` does not exist";
 
   builderSpecialArgs =
-    {
-      inputs,
-      ref,
+    { inputs
+    , ref
+    ,
     }:
     if lib.hasPrefix "nixos-raspberrypi." ref then
       { nixos-raspberrypi = inputs.nixos-raspberrypi; }
@@ -105,10 +105,10 @@ let
       lib.mkOverride priority value;
 
   makeSembleModule =
-    {
-      moduleDef,
-      inputs,
-      inputRefs ? moduleDef.inputs,
+    { moduleDef
+    , inputs
+    , inputRefs ? moduleDef.inputs
+    ,
     }:
     args@{ config, ... }:
     let
@@ -126,23 +126,25 @@ let
           moduleDef.config;
     in
     {
-      imports = map (ref: resolveInputRef {
-        inherit inputs ref;
-        file = moduleDef.file;
-      }) inputRefs;
+      imports = map
+        (ref: resolveInputRef {
+          inherit inputs ref;
+          file = moduleDef.file;
+        })
+        inputRefs;
       options = lib.setAttrByPath namespacePath optionsValue;
       config = configValue;
     };
 
   addResolvedItem =
-    {
-      file,
-      label,
-      itemType,
-      itemKey,
-      origin,
-      state,
-      allowDuplicate,
+    { file
+    , label
+    , itemType
+    , itemKey
+    , origin
+    , state
+    , allowDuplicate
+    ,
     }:
     if builtins.hasAttr itemKey state.seen then
       let
@@ -180,38 +182,43 @@ let
       };
 
   collectResolvedItems =
-    {
-      file,
-      label,
-      itemType,
-      selections,
-      allowDuplicates ? false,
+    { file
+    , label
+    , itemType
+    , selections
+    , allowDuplicates ? false
+    ,
     }:
-    builtins.foldl' (
-      state: selection:
-      addResolvedItem {
-        inherit file label itemType state;
-        itemKey = selection.key;
-        origin = selection.origin;
-        allowDuplicate = allowDuplicates;
-      }
-    ) { seen = { }; ordered = [ ]; duplicates = [ ]; } selections;
+    builtins.foldl'
+      (
+        state: selection:
+        addResolvedItem {
+          inherit file label itemType state;
+          itemKey = selection.key;
+          origin = selection.origin;
+          allowDuplicate = allowDuplicates;
+        }
+      )
+      { seen = { }; ordered = [ ]; duplicates = [ ]; }
+      selections;
 
   collectPresetSelections =
-    {
-      host,
-      profileDefs,
+    { host
+    , profileDefs
+    ,
     }:
     let
-      profileSelections = lib.concatMap (
-        profile:
-        map
-          (presetKey: {
-            key = presetKey;
-            origin = makeOrigin "profile" profile.key profile.file;
-          })
-          profile.presets
-      ) profileDefs;
+      profileSelections = lib.concatMap
+        (
+          profile:
+          map
+            (presetKey: {
+              key = presetKey;
+              origin = makeOrigin "profile" profile.key profile.file;
+            })
+            profile.presets
+        )
+        profileDefs;
       hostSelections = map
         (presetKey: {
           key = presetKey;
@@ -227,24 +234,26 @@ let
     };
 
   collectExplicitSelections =
-    {
-      host,
-      presetDefs,
-      field,
-      label,
-      itemType,
-      allowDuplicates ? false,
+    { host
+    , presetDefs
+    , field
+    , label
+    , itemType
+    , allowDuplicates ? false
+    ,
     }:
     let
-      presetSelections = lib.concatMap (
-        preset:
-        map
-          (itemKey: {
-            key = itemKey;
-            origin = makeOrigin "preset" preset.key preset.file;
-          })
-          preset.${field}
-      ) presetDefs;
+      presetSelections = lib.concatMap
+        (
+          preset:
+          map
+            (itemKey: {
+              key = itemKey;
+              origin = makeOrigin "preset" preset.key preset.file;
+            })
+            preset.${field}
+        )
+        presetDefs;
       hostSelections = map
         (itemKey: {
           key = itemKey;
@@ -259,9 +268,9 @@ let
     };
 
   moduleInputPlan =
-    {
-      moduleDefs,
-      seenInputs ? { },
+    { moduleDefs
+    , seenInputs ? { }
+    ,
     }:
     let
       stepModule =
@@ -291,9 +300,9 @@ let
     (builtins.foldl' stepModule { seen = seenInputs; planned = [ ]; } moduleDefs).planned;
 
   resolveHost =
-    {
-      project,
-      key,
+    { project
+    , key
+    ,
     }:
     let
       host = requireByKey project.root "host" key project.hostsByKey;
@@ -317,15 +326,17 @@ let
         itemType = "input module";
         allowDuplicates = true;
       };
-      transitiveInputSelections = lib.concatMap (
-        moduleDef:
-        map
-          (ref: {
-            key = ref;
-            origin = makeOrigin "module" moduleDef.key moduleDef.file;
-          })
-          moduleDef.inputs
-      ) moduleDefs;
+      transitiveInputSelections = lib.concatMap
+        (
+          moduleDef:
+          map
+            (ref: {
+              key = ref;
+              origin = makeOrigin "module" moduleDef.key moduleDef.file;
+            })
+            moduleDef.inputs
+        )
+        moduleDefs;
       modulePlans = moduleInputPlan {
         inherit moduleDefs;
         seenInputs = lib.listToAttrs (
@@ -353,14 +364,16 @@ let
             inherit (project) inputs;
           })
           modulePlans
-        ++ map (
-          selection:
-          resolveInputRef {
-            inputs = project.inputs;
-            file = host.file;
-            ref = selection.key;
-          }
-        ) explicitInputSelections.ordered
+        ++ map
+          (
+            selection:
+            resolveInputRef {
+              inputs = project.inputs;
+              file = host.file;
+              ref = selection.key;
+            }
+          )
+          explicitInputSelections.ordered
         ++ map (preset: { config = overrideValues 200 preset.values; }) presetDefs
         ++ [
           {
@@ -372,10 +385,10 @@ let
     };
 
   resolveImage =
-    {
-      project,
-      key,
-      overlays ? [ ],
+    { project
+    , key
+    , overlays ? [ ]
+    ,
     }:
     let
       image = requireByKey project.root "image" key project.imagesByKey;
@@ -406,15 +419,17 @@ let
           })
           image.inputModules;
       };
-      transitiveImageInputSelections = lib.concatMap (
-        moduleDef:
-        map
-          (ref: {
-            key = ref;
-            origin = makeOrigin "module" moduleDef.key moduleDef.file;
-          })
-          moduleDef.inputs
-      ) imageModuleDefs;
+      transitiveImageInputSelections = lib.concatMap
+        (
+          moduleDef:
+          map
+            (ref: {
+              key = ref;
+              origin = makeOrigin "module" moduleDef.key moduleDef.file;
+            })
+            moduleDef.inputs
+        )
+        imageModuleDefs;
       imageModulePlans = moduleInputPlan {
         moduleDefs = imageModuleDefs;
         seenInputs = lib.listToAttrs (
@@ -435,14 +450,16 @@ let
             inherit (project) inputs;
           })
           imageModulePlans
-        ++ map (
-          selection:
-          resolveInputRef {
-            inputs = project.inputs;
-            file = image.file;
-            ref = selection.key;
-          }
-        ) explicitImageInputSelections.ordered
+        ++ map
+          (
+            selection:
+            resolveInputRef {
+              inputs = project.inputs;
+              file = image.file;
+              ref = selection.key;
+            }
+          )
+          explicitImageInputSelections.ordered
         ++ [
           image.configuration
           imageConfigFileModule

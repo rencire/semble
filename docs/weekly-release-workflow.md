@@ -15,8 +15,10 @@ gh workflow run weekly-release.yml
 ## What it does
 
 1. Checks for new commits since the last git tag
-2. Parses conventional commit subjects to determine the bump type (major/minor/patch)
-3. Skips the release if there are no releasable commits (only `docs`/`test`/`chore`/`refactor`)
+2. Parses conventional commit subjects to determine the bump type
+   (major/minor/patch)
+3. Skips the release if there are no releasable commits (only
+   `docs`/`test`/`chore`/`refactor`)
 4. Updates `Cargo.toml` and `nix/packages/semble.nix` with the new version
 5. Regenerates `Cargo.lock` via `cargo check`
 6. Commits, tags, and pushes

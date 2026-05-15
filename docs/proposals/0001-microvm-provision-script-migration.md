@@ -34,8 +34,8 @@ The existing shell script currently does all of the following:
 4. Refuses to proceed if the volume configuration is invalid, if there is more
    than one volume entry, or if encrypted provisioning is requested with a
    non-null `mountPoint`.
-5. Skips provisioning entirely when `autoCreate=true`, since the microVM
-   service will create the volume at boot.
+5. Skips provisioning entirely when `autoCreate=true`, since the microVM service
+   will create the volume at boot.
 6. Creates or truncates the backing image on the parent host when
    `autoCreate=false`, requiring `--force-reformat` if the image already exists.
 7. For encrypted provisioning, copies the root unlock key to the parent host,
@@ -48,8 +48,8 @@ The existing shell script currently does all of the following:
 11. Optionally copies SSH host keys into `/etc/ssh/` inside the guest root.
 12. Verifies that the installed system profile exists, that `/etc/NIXOS` is
     present, and that SSH host keys were installed when requested.
-13. Cleans up the remote mount, mapper, and temporary uploaded files on exit
-    or failure.
+13. Cleans up the remote mount, mapper, and temporary uploaded files on exit or
+    failure.
 
 ## Proposed Change
 
@@ -57,20 +57,19 @@ Add a Semble `microvm provision` command so it can absorb the logic from the
 external shell script and replace the existing `microvm provision-identity`
 command.
 
-The command should own the provisioning workflow end to end, including the
-steps needed to prepare the MicroVM's encrypted root provisioning path.
-It should also bring the guest online by handling the MicroVM host-side
-activation step after the image is installed.
-Encrypted provisioning should use a fixed mapper name convention (`cryptroot`)
-instead of exposing a mapper-name override.
+The command should own the provisioning workflow end to end, including the steps
+needed to prepare the MicroVM's encrypted root provisioning path. It should also
+bring the guest online by handling the MicroVM host-side activation step after
+the image is installed. Encrypted provisioning should use a fixed mapper name
+convention (`cryptroot`) instead of exposing a mapper-name override.
 
 The current Semble `microvm provision-identity` command can inform the new
 implementation, but the user-facing command should be broader than identity
 setup if the script covers additional provisioning duties such as creating the
 root image and copying the SSH files needed for identity.
 
-For a higher-level comparison of the shared provisioning shape across
-MicroVMs and physical hosts, see [docs/provisioning-flows.md](../provisioning-flows.md).
+For a higher-level comparison of the shared provisioning shape across MicroVMs
+and physical hosts, see [docs/provisioning-flows.md](../provisioning-flows.md).
 
 ## Command Name
 
@@ -84,11 +83,11 @@ Why this shape:
 - It matches the actual task, which is guest provisioning on a parent host.
 - It avoids turning `host provision` into a mode-switched command with a
   MicroVM-specific flag.
-- It leaves room for a broader MicroVM command family later if Semble grows
-  more guest-oriented workflows.
-- It reflects that this workflow differs from physical-host provisioning:
-  first the guest image is provisioned on the parent host, then the host-side
-  Semble flow activates the MicroVM guest as part of the same command.
+- It leaves room for a broader MicroVM command family later if Semble grows more
+  guest-oriented workflows.
+- It reflects that this workflow differs from physical-host provisioning: first
+  the guest image is provisioned on the parent host, then the host-side Semble
+  flow activates the MicroVM guest as part of the same command.
 - It avoids making the mapper name a public provisioning override and keeps the
   encrypted-root convention consistent.
 
@@ -120,8 +119,8 @@ image preparation.
 1. Migrate or port the existing `rensemble` test coverage into Semble tests or
    command-level fixtures.
 2. Implement the Semble command so it reproduces that behavior.
-3. Update Semble docs to point users at the new command and remove references
-   to `microvm provision-identity`.
+3. Update Semble docs to point users at the new command and remove references to
+   `microvm provision-identity`.
 4. Remove or deprecate the old shell script in `rensemble` once the Semble
    version is stable.
 5. Remove `microvm provision-identity` once the broader command covers its
@@ -136,8 +135,7 @@ image preparation.
 ## Notes
 
 This proposal is intentionally broader than an ADR. It is about moving a
-workflow into Semble, not about changing Semble's long-lived architecture
-model.
+workflow into Semble, not about changing Semble's long-lived architecture model.
 
 ## Research Resources
 

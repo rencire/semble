@@ -16,135 +16,43 @@
       flake = false;
     };
     nix-wrapper-modules = {
-      url = "github:BirdeeHub/nix-wrapper-modules";
+      url = "github:rencire/nix-wrapper-modules/feat/wofr-wrapper";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     llm-agents = {
       url = "github:numtide/llm-agents.nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    entire-cli-nix = {
-      url = "github:rencire/entire-cli-nix";
+    entire-cli-flake = {
+      url = "github:rencire/entire-cli-flake";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flakelight.follows = "flakelight";
+      inputs.confix.follows = "confix";
+      inputs.nix-wrapper-modules.follows = "nix-wrapper-modules";
+      inputs.llm-agents.follows = "llm-agents";
+      inputs.agent-skills.follows = "agent-skills";
+      inputs.rencire-skills.follows = "personal-skills";
     };
     confix = {
       url = "github:rencire/confix";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flakelight.follows = "flakelight";
       inputs.nix-wrapper-modules.follows = "nix-wrapper-modules";
+    };
+    gstack = {
+      url = "github:garrytan/gstack";
+      flake = false;
     };
   };
 
-  outputs =
-    {
-      self,
-      nixpkgs,
-      llm-agents,
-      entire-cli-nix,
-      confix,
-      ...
-    }@inputs:
-    let
-      lib = nixpkgs.lib;
-      agentLib = inputs."agent-skills".lib."agent-skills";
-      sources = {
-        shared = {
-          path = inputs."personal-skills";
-          subdir = "skills";
-        };
-      };
-      enabledSkills = [
-        "dev-loop"
-        "doc-table-of-contents"
-        "nix-repo"
-        "public-repo-readiness"
-        "vcs"
-      ];
-      catalog = agentLib.discoverCatalog sources;
-      allowlist = agentLib.allowlistFor {
-        inherit catalog sources;
-        enable = enabledSkills;
-      };
-      selection = agentLib.selectSkills {
-        inherit catalog allowlist sources;
-        skills = { };
-      };
-      localTargets = {
-        agents = agentLib.defaultLocalTargets.agents // {
-          enable = true;
-        };
-        claude = agentLib.defaultLocalTargets.claude // {
-          enable = false;
-        };
-      };
+  outputs = { flakelight, ... }@inputs:
+    flakelight ./. {
+      inherit inputs;
       systems = [
         "aarch64-darwin"
         "aarch64-linux"
         "x86_64-darwin"
         "x86_64-linux"
       ];
-      forEachSystem =
-        f:
-        lib.genAttrs systems (
-          system:
-          f (
-            import nixpkgs {
-              inherit system;
-              overlays = [
-                self.overlays.default
-              ];
-            }
-          )
-        );
-    in
-    {
-      overlays = import ./nix/overlays;
-
-      lib = import ./nix/lib { inherit nixpkgs; };
-
-      packages = forEachSystem (pkgs: import ./nix/packages { inherit pkgs; });
-
-      apps = forEachSystem (pkgs: {
-        semble = {
-          type = "app";
-          program = "${pkgs.semble}/bin/semble";
-        };
-        default = {
-          type = "app";
-          program = "${pkgs.semble}/bin/semble";
-        };
-      });
-
-      devShells = forEachSystem (
-        pkgs:
-        let
-          pkgs' = pkgs.extend llm-agents.overlays.shared-nixpkgs;
-          bundle = agentLib.mkBundle {
-            pkgs = pkgs';
-            inherit selection;
-          };
-          configured = confix.lib.configure {
-            pkgs = pkgs';
-            configDir = ./nix/confix;
-          };
-        in
-        import ./nix/devShells {
-          inherit
-            agentLib
-            bundle
-            confix
-            entire-cli-nix
-            configured
-            localTargets
-            ;
-          pkgs = pkgs';
-        }
-      );
-
-      checks = forEachSystem (
-        pkgs:
-        import ./nix/checks {
-          inherit pkgs self nixpkgs;
-        }
-      );
     };
 }

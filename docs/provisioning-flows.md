@@ -20,19 +20,19 @@ The ownership of those steps differs by workflow:
 
 For physical hosts, `host provision` forwards trailing passthrough arguments
 directly to `nixos-anywhere`. Use `--disk-encryption-keys` there for encrypted
-disk setup; Semble does not interpret that flag itself.
-The MicroVM-only flags on `host provision` are `--disk-encryption-keys`,
-`--host-keys-dir`, `--system-store-path`, `--no-encrypt`, and
-`--force-reformat`.
+disk setup; Semble does not interpret that flag itself. The MicroVM-only flags
+on `host provision` are `--disk-encryption-keys`, `--host-keys-dir`,
+`--system-store-path`, `--no-encrypt`, and `--force-reformat`.
 
-`--disk-encryption-keys` is only for Semble's MicroVM provisioning path, where it
-stages the guest root unlock key before the image is installed.
+`--disk-encryption-keys` is only for Semble's MicroVM provisioning path, where
+it stages the guest root unlock key before the image is installed.
 
 ## Practical Examples
 
 ### Physical Host Provision
 
-All flags after the hostname are forwarded directly to `nixos-anywhere`. No `--` separator is needed.
+All flags after the hostname are forwarded directly to `nixos-anywhere`. No `--`
+separator is needed.
 
 **Basic provision:**
 
@@ -65,7 +65,8 @@ semble host provision my-host \
 
 ### MicroVM Provision
 
-All flags are Semble flags interpreted directly (no passthrough to external tools).
+All flags are Semble flags interpreted directly (no passthrough to external
+tools).
 
 **Basic encrypted provision:**
 
@@ -83,27 +84,28 @@ semble host provision my-vm \
 
 ### Flag Reference
 
-| Flag | Physical Host | MicroVM | Source |
-|------|--------------|---------|--------|
-| `--builder-policy` | ✅ Semble flag | ✅ Semble flag | Semble |
-| `--disk-encryption-keys` | ✅ Forwarded | ✅ MicroVM flag* | nixos-anywhere / Semble |
-| `--host-keys-dir` | ✅ Forwarded | ✅ MicroVM flag | Semble |
-| `--no-encrypt` | ❌ Error | ✅ Optional | Semble |
-| `--system-store-path` | ❌ Error | ✅ Optional | Semble |
-| `--force-reformat` | ❌ Error | ✅ Optional | Semble |
-| `--target-host` | ✅ Forwarded | ❌ Use `provisionTarget`** | nixos-anywhere |
-| `--generate-hardware-config` | ✅ Forwarded | ❌ | nixos-anywhere |
-| `--disko-mode` | ✅ Forwarded | ❌ | nixos-anywhere |
-| `--phases` | ✅ Forwarded | ❌ | nixos-anywhere |
-| `--build-on` | ✅ Forwarded | ❌ | nixos-anywhere |
+| Flag                         | Physical Host  | MicroVM                      | Source                  |
+| ---------------------------- | -------------- | ---------------------------- | ----------------------- |
+| `--builder-policy`           | ✅ Semble flag | ✅ Semble flag               | Semble                  |
+| `--disk-encryption-keys`     | ✅ Forwarded   | ✅ MicroVM flag\*            | nixos-anywhere / Semble |
+| `--host-keys-dir`            | ✅ Forwarded   | ✅ MicroVM flag              | Semble                  |
+| `--no-encrypt`               | ❌ Error       | ✅ Optional                  | Semble                  |
+| `--system-store-path`        | ❌ Error       | ✅ Optional                  | Semble                  |
+| `--force-reformat`           | ❌ Error       | ✅ Optional                  | Semble                  |
+| `--target-host`              | ✅ Forwarded   | ❌ Use `provisionTarget`\*\* | nixos-anywhere          |
+| `--generate-hardware-config` | ✅ Forwarded   | ❌                           | nixos-anywhere          |
+| `--disko-mode`               | ✅ Forwarded   | ❌                           | nixos-anywhere          |
+| `--phases`                   | ✅ Forwarded   | ❌                           | nixos-anywhere          |
+| `--build-on`                 | ✅ Forwarded   | ❌                           | nixos-anywhere          |
 
-\* For MicroVM, `--disk-encryption-keys` takes one argument (the local key path).  
-\** MicroVM uses `provisionTarget` from host config in `semble.toml`
+\* For MicroVM, `--disk-encryption-keys` takes one argument (the local key
+path).  
+\*\* MicroVM uses `provisionTarget` from host config in `semble.toml`
 
 ## MicroVM Guest Provisioning
 
-In the MicroVM case, the target is a guest image managed on the parent host.
-For the lower-level guest setup checklist, see
+In the MicroVM case, the target is a guest image managed on the parent host. For
+the lower-level guest setup checklist, see
 [docs/microvm-guest-lifecycle.md](./microvm-guest-lifecycle.md).
 
 1. The guest configuration is defined first.
@@ -134,16 +136,16 @@ workflows even if the high-level steps look similar.
 
 ## Host Type Comparison
 
-This table compares the current public command shape against the two host
-types discussed in the lifecycle docs.
+This table compares the current public command shape against the two host types
+discussed in the lifecycle docs.
 
-| Command | Physical host | MicroVM host |
-|---|---|---|
-| `host create` | Scaffold a normal host directory from the selected template. | Scaffold a MicroVM-backed host definition and note the parent-host requirement. |
-| `host build` | Build the host config for a real machine. | Build the guest config that will become the MicroVM image. |
-| `host switch` | Deploy the host config to the physical machine and activate it there. | Deploy the parent host config so it wires up and starts the MicroVM guest. |
+| Command          | Physical host                                                                        | MicroVM host                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `host create`    | Scaffold a normal host directory from the selected template.                         | Scaffold a MicroVM-backed host definition and note the parent-host requirement.                      |
+| `host build`     | Build the host config for a real machine.                                            | Build the guest config that will become the MicroVM image.                                           |
+| `host switch`    | Deploy the host config to the physical machine and activate it there.                | Deploy the parent host config so it wires up and starts the MicroVM guest.                           |
 | `host provision` | Install the system onto the target machine, including disk prep and reboot/activate. | Provision the guest image on the parent host, then require a parent-host switch to make it runnable. |
-| `host delete` | Remove the host scaffold, keys, and related metadata. | Remove the MicroVM host scaffold, guest identity, and related metadata. |
+| `host delete`    | Remove the host scaffold, keys, and related metadata.                                | Remove the MicroVM host scaffold, guest identity, and related metadata.                              |
 
 ## Under The Hood
 

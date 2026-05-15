@@ -48,8 +48,7 @@ describes the shared high-level provisioning shape.
 
 ## Relationship To Semble Commands
 
-Today, Semble exposes the provisioning workflow through
-`semble host provision`.
+Today, Semble exposes the provisioning workflow through `semble host provision`.
 That command currently covers step 6 only: it provisions the guest image on the
 parent host and validates the installed root.
 

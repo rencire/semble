@@ -92,9 +92,8 @@ Physical-host example:
 semble host provision thor --target-host genesis-nixos
 ```
 
-In both cases, the intended behavior is that Semble discovers the encryption
-key configuration from the repo and fills in the right underlying install-time
-flag.
+In both cases, the intended behavior is that Semble discovers the encryption key
+configuration from the repo and fills in the right underlying install-time flag.
 
 ## Open Questions
 

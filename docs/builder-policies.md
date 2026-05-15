@@ -50,8 +50,8 @@ The same flag should be accepted by:
 Semble resolves the named policy before delegating to the underlying build or
 deploy command.
 
-`--builder-policy` constrains builder selection for the delegated build. It
-does not change the deployment target selected by flags such as `--target-host`.
+`--builder-policy` constrains builder selection for the delegated build. It does
+not change the deployment target selected by flags such as `--target-host`.
 
 ## Minimal `semble.toml` Shape
 
@@ -101,14 +101,14 @@ suitably usable by the actual Nix remote-builder SSH path.
 
 In practice, builder policies are more robust when `host` is a real
 `user@hostname` destination instead of a shell-only SSH alias, because Nix's
-remote-builder transport may not resolve aliases from the same config context
-as an interactive user shell.
+remote-builder transport may not resolve aliases from the same config context as
+an interactive user shell.
 
 `ssh_key` is optional. When present, Semble serializes it into Nix's builder
 entry so the delegated command does not have to rely on ambient `ssh-agent`
 state. This is especially useful on macOS multi-user Nix setups where remote
-builder SSH runs under the daemon/build-user context rather than the
-interactive user shell.
+builder SSH runs under the daemon/build-user context rather than the interactive
+user shell.
 
 ## Why This Belongs In `semble.toml`
 
@@ -117,7 +117,8 @@ Builder policy is execution-time orchestration metadata:
 - it affects how Semble invokes Nix
 - it does not become part of the built target system
 - it should be resolved before the delegated command starts
-- the intended abstraction is broader than a single host, but the current implementation only narrows to one host at a time
+- the intended abstraction is broader than a single host, but the current
+  implementation only narrows to one host at a time
 
 That makes it closer to existing `semble.toml` concerns like repo paths and
 execution-time command metadata than to host-local NixOS configuration.

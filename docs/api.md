@@ -3,8 +3,8 @@
 This document defines the standard Semble consumer interface and the internal
 normalization model Semble uses to assemble hosts.
 
-It defines what files consumers write, what fields they support, and how
-Semble resolves composition and values. Higher-level rationale lives in
+It defines what files consumers write, what fields they support, and how Semble
+resolves composition and values. Higher-level rationale lives in
 `docs/architecture.md`, and shared vocabulary in `docs/terminology.md`.
 
 ## Example Project Structure
@@ -66,9 +66,11 @@ Semble is responsible for:
 
 - discovering `hosts/`, `modules/`, `presets/`, and `profiles/`
 - validating and normalizing those files
-- resolving Semble composition across profiles, presets, modules, and raw input module escape hatches
+- resolving Semble composition across profiles, presets, modules, and raw input
+  module escape hatches
 - returning `nixosConfigurations` for `nixos-rebuild --flake`
-- returning `images` for bootable artifact builds such as `nix build .#images.installer`
+- returning `images` for bootable artifact builds such as
+  `nix build .#images.installer`
 
 The consumer remains responsible for its own `devShells` used with
 `nix develop`.
@@ -181,9 +183,9 @@ This is the intended v1 extension pattern:
 - the consumer can add other standard outputs as needed
 - `devShells` remain consumer-owned for now
 
-Semble-native concepts such as `hosts`, `modules`, `presets`, and `profiles`
-are authored as files in the project tree, not manually assembled as flake
-outputs by the consumer.
+Semble-native concepts such as `hosts`, `modules`, `presets`, and `profiles` are
+authored as files in the project tree, not manually assembled as flake outputs
+by the consumer.
 
 ## Hosts
 
@@ -212,15 +214,18 @@ Supported host fields:
 - `system`: The target system string, such as `"x86_64-linux"`.
 - `type`: Required host lifecycle type. Supported values are `"physical"` and
   `"microvm"`.
-- `builder`: Optional attr-path string selecting the system constructor. Defaults
-  to `nixpkgs.lib.nixosSystem`. This allows alternate host backends such as
-  `nixos-raspberrypi.lib.nixosSystemFull`.
+- `builder`: Optional attr-path string selecting the system constructor.
+  Defaults to `nixpkgs.lib.nixosSystem`. This allows alternate host backends
+  such as `nixos-raspberrypi.lib.nixosSystemFull`.
 - `provisionTarget`: Required for `type = "microvm"`. SSH destination used when
   provisioning the guest image on the parent machine.
 - `profiles`: A list of profile keys to include.
 - `presets`: A list of preset keys to include directly.
-- `modules`: A list of local Semble module keys to include directly for this host.
-- `inputModules`: A list of raw input module references to include directly for this host. This is the raw upstream layer for cases where a local Semble abstraction is not needed yet.
+- `modules`: A list of local Semble module keys to include directly for this
+  host.
+- `inputModules`: A list of raw input module references to include directly for
+  this host. This is the raw upstream layer for cases where a local Semble
+  abstraction is not needed yet.
 - `configFile`: Optional path to a host-local override module. Defaults to
   `./configuration.nix`.
 - `configuration`: Optional inline host-local module content.
@@ -230,7 +235,8 @@ Supported host fields:
 Hosts should start at one of these two layers:
 
 - `inputModules`, when they want to consume an upstream NixOS module directly
-- `modules`, when they already want a local Semble capability name and option surface
+- `modules`, when they already want a local Semble capability name and option
+  surface
 
 They should move upward only when repetition appears:
 
@@ -478,8 +484,8 @@ meaningful local API yet, `inputModules` is the simpler starting point.
 
 ## Presets
 
-Presets live under `presets/`. They compose modules and assign reusable
-default values to existing module options. They do not define new options.
+Presets live under `presets/`. They compose modules and assign reusable default
+values to existing module options. They do not define new options.
 
 ```nix
 # presets/security/sopsDefault.nix
@@ -524,8 +530,8 @@ baselines. They do not compose modules directly.
 }
 ```
 
-Profile keys are derived from file paths. For example,
-`profiles/base.nix` becomes `base`.
+Profile keys are derived from file paths. For example, `profiles/base.nix`
+becomes `base`.
 
 Supported profile fields:
 
@@ -571,7 +577,8 @@ Once the import graph is assembled, Semble applies configuration in this order:
 Hosts should usually start at one of two layers:
 
 - `inputModules`, when the project wants to use an upstream module directly.
-- `modules`, when the project already wants a local Semble capability name and interface.
+- `modules`, when the project already wants a local Semble capability name and
+  interface.
 
 From there:
 

@@ -19,20 +19,22 @@ let
     ;
 
   normalizeHost =
-    {
-      path,
-      relativePath,
+    { path
+    , relativePath
+    ,
     }:
     let
       raw = assertAttrset path (import path);
       value = assertAllowedFields path [ "hostName" "system" "builder" "type" "provisionTarget" "profiles" "presets" "modules" "inputModules" "configFile" "configuration" ] raw;
       hostName = assertString path "hostName" (value.hostName or (fileError path "missing required field `hostName`"));
       system = assertString path "system" (value.system or (fileError path "missing required field `system`"));
-      builder = assertString path "builder" (value.builder or (
-        if lib.hasSuffix "-darwin" system
-        then "nix-darwin.lib.darwinSystem"
-        else "nixpkgs.lib.nixosSystem"
-      ));
+      builder = assertString path "builder" (
+        value.builder or (
+          if lib.hasSuffix "-darwin" system
+          then "nix-darwin.lib.darwinSystem"
+          else "nixpkgs.lib.nixosSystem"
+        )
+      );
       hostType = assertString path "type" (value.type or (fileError path "missing required field `type`"));
       _typeCheck =
         assertCondition
@@ -88,9 +90,9 @@ let
     };
 
   normalizeModule =
-    {
-      path,
-      relativePath,
+    { path
+    , relativePath
+    ,
     }:
     let
       raw = assertAttrset path (import path);
@@ -114,9 +116,9 @@ let
     };
 
   normalizePreset =
-    {
-      path,
-      relativePath,
+    { path
+    , relativePath
+    ,
     }:
     let
       raw = assertAttrset path (import path);
@@ -141,9 +143,9 @@ let
     };
 
   normalizeProfile =
-    {
-      path,
-      relativePath,
+    { path
+    , relativePath
+    ,
     }:
     let
       raw = assertAttrset path (import path);
@@ -165,9 +167,9 @@ let
     };
 
   normalizeImage =
-    {
-      path,
-      relativePath,
+    { path
+    , relativePath
+    ,
     }:
     let
       raw = assertAttrset path (import path);
@@ -218,11 +220,11 @@ let
     };
 
   discoverKind =
-    {
-      root,
-      name,
-      includeFile,
-      normalize,
+    { root
+    , name
+    , includeFile
+    , normalize
+    ,
     }:
     assertUniqueItems name (
       map normalize (
@@ -234,9 +236,9 @@ let
     );
 
   discoverProject =
-    {
-      root,
-      inputs,
+    { root
+    , inputs
+    ,
     }:
     let
       hosts = discoverKind {

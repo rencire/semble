@@ -76,7 +76,8 @@ Each layer should own a different kind of decision:
 - Profiles owning broad baseline composition
 - Presets owning reusable bundles and conventional defaults
 - Modules owning schema, behavior, and upstream integration knowledge
-- Input modules serving as temporary or host-specific direct upstream escape hatches
+- Input modules serving as temporary or host-specific direct upstream escape
+  hatches
 
 This keeps responsibilities clear and reduces overlap.
 
@@ -112,8 +113,8 @@ Semble is:
 - A facade module system built on top of upstream module systems
 - A way to organize reusable NixOS concerns cleanly
 - A boundary between reusable abstractions and host-local intent
-- A stricter interface for assembling systems from input modules, modules, presets, and
-  profiles
+- A stricter interface for assembling systems from input modules, modules,
+  presets, and profiles
 - An opinionated structure for organizing host configuration
 
 ## What Semble Is Not
