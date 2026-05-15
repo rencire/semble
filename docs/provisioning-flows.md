@@ -3,6 +3,40 @@
 This note captures the shared shape of Semble-style guest provisioning and
 remote host installation workflows.
 
+## Quickstart
+
+The most common physical-host provisioning command:
+
+```bash
+semble host provision my-host \
+  --builder-policy buildbox \
+  --target-host my-host-deploy \
+  --host-keys-dir ./ssh_host_keys/my-host \
+  --disk-encryption-keys /tmp/luks-root.key ./secrets/disk_keys/my-host/luks-root.key \
+  --generate-hardware-config nixos-facter ./hosts/my-host/facter.json \
+  --disko-mode disko \
+  --phases disko,install,reboot
+```
+
+This assumes a three-machine setup: your **laptop** runs `semble`, the
+**build machine** (named `buildbox` in `semble.toml`) performs the Nix build,
+and the **target machine** receives the pre-built closure for installation.
+
+| Flag | Purpose |
+|------|---------|
+| `--builder-policy buildbox` | Pin the build to a specific remote builder (`buildbox`) defined in `semble.toml`. Without this, the Nix build would run locally on your laptop. |
+| `--target-host my-host-deploy` | SSH alias or address of the target machine's installer environment (the NixOS installer ISO running on the machine being provisioned). |
+| `--host-keys-dir ./ssh_host_keys/my-host` | Path to the host's SSH keys. `nixos-anywhere` injects these into the installed system so you can SSH in on first boot without manual key setup. |
+| `--disk-encryption-keys /tmp/luks-root.key ./secrets/disk_keys/my-host/luks-root.key` | Two paths: the remote path on the installer machine (where the key lands temporarily) and the local path in the repo. Required when the target uses LUKS-encrypted root. |
+| `--generate-hardware-config nixos-facter ./hosts/my-host/facter.json` | Run `nixos-facter` on the target to detect hardware (disk topology, network interfaces, etc.) and write the result to the repo. |
+| `--disko-mode disko` | Run `disko` in normal mode (format and mount). The alternative `--disko-mode mount` only mounts existing partitions. |
+| `--phases disko,install,reboot` | Which phases of `nixos-anywhere` to run: prepare disks (`disko`), install the system (`install`), then reboot (`reboot`). |
+
+To build on the target machine's installer instead (e.g. if the target has
+more RAM/cores than your laptop), replace the first two flags with
+`--build-on remote` and drop `--builder-policy` — they are mutually
+exclusive.
+
 The details differ, but the high-level pattern is similar:
 
 1. Define the desired NixOS configuration up front.
@@ -49,19 +83,23 @@ semble host provision my-host \
   --generate-hardware-config nixos-facter ./hosts/my-host/facter.json
 ```
 
-**Full example (all common flags):**
+**Build on the target (mutually exclusive with `--builder-policy`):**
 
 ```bash
 semble host provision my-host \
-  --builder-policy buildbox \
   --target-host my-host-deploy \
   --host-keys-dir ./ssh_host_keys/my-host \
-  --disk-encryption-keys /tmp/luks-key ./secrets/my-host/luks-root.key \
+  --disk-encryption-keys /tmp/luks-root.key ./secrets/disk_keys/my-host/luks-root.key \
   --generate-hardware-config nixos-facter ./hosts/my-host/facter.json \
   --disko-mode disko \
   --phases disko,install,reboot \
   --build-on remote
 ```
+
+This builds the closure directly on the target machine's installer environment
+(via `--build-on remote`) and installs it in place. Use this instead of
+`--builder-policy` when the target has enough RAM/CPU and you want to avoid
+transferring a large closure over the network.
 
 ### MicroVM Provision
 
