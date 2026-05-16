@@ -2,6 +2,7 @@ use crate::config::{BuilderPolicyConfig, SembleConfig};
 use anyhow::Context;
 use anyhow::Result;
 use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -77,6 +78,107 @@ impl RepoPaths {
             .iter()
             .find(|policy| policy.name == name)
     }
+
+    pub fn ssh_cache_dir(&self) -> PathBuf {
+        self.root.join(".semble/cache/ssh")
+    }
+
+    pub fn ssh_alias_config_file(&self) -> PathBuf {
+        self.ssh_cache_dir().join("semble-servers.conf")
+    }
+
+    pub fn ssh_known_hosts_file(&self) -> PathBuf {
+        self.ssh_cache_dir().join("known_hosts")
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct HostOperatorAlias {
+    pub name: Option<String>,
+    pub user: String,
+    pub identity_file: String,
+    pub host_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct HostOperatorConfig {
+    pub role: Option<String>,
+    pub host_name: Option<String>,
+    pub alias_templates: Option<Vec<String>>,
+    #[serde(default)]
+    pub extra_alias_templates: Vec<String>,
+    #[serde(default)]
+    pub aliases: Vec<HostOperatorAlias>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct HostManifestConfig {
+    pub host_name: Option<String>,
+    pub operator: Option<HostOperatorConfig>,
+}
+
+pub fn load_host_manifests(paths: &RepoPaths) -> Result<BTreeMap<String, HostManifestConfig>> {
+    load_host_manifests_from_nix(paths)?.ok_or_else(|| {
+        anyhow::anyhow!("missing host metadata; expected `flake._semble.hosts` in the repo flake")
+    })
+}
+
+fn load_host_manifests_from_nix(
+    paths: &RepoPaths,
+) -> Result<Option<BTreeMap<String, HostManifestConfig>>> {
+    load_host_manifests_with(paths, run_nix_eval_host_manifests)
+}
+
+fn load_host_manifests_with(
+    paths: &RepoPaths,
+    eval: impl FnOnce(&RepoPaths) -> Result<Option<Vec<u8>>>,
+) -> Result<Option<BTreeMap<String, HostManifestConfig>>> {
+    let Some(stdout) = eval(paths)? else {
+        return Ok(None);
+    };
+
+    serde_json::from_slice(&stdout).context("failed to parse host manifests from `nix eval`")
+}
+
+fn run_nix_eval_host_manifests(paths: &RepoPaths) -> Result<Option<Vec<u8>>> {
+    let hosts_dir = paths
+        .hosts_dir()
+        .canonicalize()
+        .with_context(|| format!("failed to canonicalize {}", paths.hosts_dir().display()))?;
+    let expr = format!(
+        r#"
+        let
+          hostsDir = {};
+          entries = builtins.readDir hostsDir;
+          names = builtins.filter (name: entries.${{name}} == "directory" && !(builtins.match "_.*" name != null)) (builtins.attrNames entries);
+        in
+          builtins.listToAttrs (map (name: {{ inherit name; value = import (hostsDir + "/${{name}}/default.nix"); }}) names)
+        "#,
+        hosts_dir.display()
+    );
+    let output = Command::new("nix")
+        .args([
+            "eval",
+            "--extra-experimental-features",
+            "nix-command flakes",
+            "--impure",
+            "--json",
+            "--expr",
+            &expr,
+        ])
+        .current_dir(paths.root())
+        .output();
+
+    let output = match output {
+        Ok(output) => output,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(err).context("failed to run `nix eval` for host manifests"),
+    };
+
+    parse_nix_eval_output(output)
 }
 
 #[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]

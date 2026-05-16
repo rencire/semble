@@ -17,6 +17,23 @@ If the key is not in the agent, SSH will accept the public key challenge but
 fail to sign it, resulting in a `Permission denied (publickey)` error that can
 be hard to diagnose.
 
+## semble host ssh generate
+
+Generates operator SSH artifacts from host manifest `operator` metadata:
+
+```bash
+semble host ssh generate
+```
+
+Outputs:
+
+- `.semble/cache/ssh/semble-servers.conf`
+- `.semble/cache/ssh/known_hosts`
+
+Hosts with `operator.role = "server"` contribute aliases. Hosts with
+`operator.role = "client"` automatically regenerate these artifacts before
+`semble host build` and `semble host switch`.
+
 ## semble host build
 
 Builds the host configuration closure without deploying it. Useful for

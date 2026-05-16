@@ -46,17 +46,17 @@ let
     overlay-marker = prev.writeShellScriptBin "overlay-marker" "";
   };
 
-  project = sembleLib.discoverProject {
+  project = sembleLib.discoverRepo {
     inputs = testInputs;
     root = successRoot;
   };
 
-  duplicateModuleProject = sembleLib.discoverProject {
+  duplicateModuleProject = sembleLib.discoverRepo {
     inputs = testInputs;
     root = duplicateModuleRoot;
   };
 
-  duplicateInputOverlapProject = sembleLib.discoverProject {
+  duplicateInputOverlapProject = sembleLib.discoverRepo {
     inputs = testInputs;
     root = duplicateInputOverlapRoot;
   };

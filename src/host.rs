@@ -50,9 +50,7 @@ impl KeyKind {
     fn file_names(self) -> &'static [&'static str] {
         match self {
             KeyKind::Ssh => &[SSH_PRIVATE_KEY_FILENAME, SSH_PUBLIC_KEY_FILENAME],
-            KeyKind::InitrdSsh => {
-                &[INITRD_SSH_PRIVATE_KEY_FILENAME, INITRD_SSH_PUBLIC_KEY_FILENAME]
-            }
+            KeyKind::InitrdSsh => &[INITRD_SSH_PRIVATE_KEY_FILENAME, INITRD_SSH_PUBLIC_KEY_FILENAME],
             KeyKind::Luks => &[LUKS_ROOT_KEY_FILENAME],
         }
     }

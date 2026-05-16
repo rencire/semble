@@ -9,12 +9,13 @@ pub mod keys;
 pub mod microvm;
 pub mod repo;
 pub mod sops;
+pub mod ssh;
 pub mod template;
 
 use anyhow::Result;
 use cli::{
     Cli, Command, HostCommand, ImageCommand, KeyActionCommand, KeysCommand, SshKeyActionCommand,
-    UnlockRootArgs,
+    UnlockRootArgs, SshCommand,
 };
 
 pub fn run(cli: Cli) -> Result<()> {
@@ -70,6 +71,12 @@ pub fn run(cli: Cli) -> Result<()> {
                     KeysCommand::Luks(args) => {
                         run_typed_keys(&paths, host::KeyKind::Luks, args.command)
                     }
+                }
+            }
+            HostCommand::Ssh(args) => {
+                let paths = repo::RepoPaths::new(std::env::current_dir()?)?;
+                match args.command {
+                    SshCommand::Generate => ssh::run_host_ssh_generate(&paths),
                 }
             }
         },

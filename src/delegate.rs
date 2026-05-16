@@ -173,7 +173,12 @@ fn run_nh_host(paths: &RepoPaths, action: &str, args: DelegatedHostArgs) -> Resu
         .and_then(|name| paths.builder_policy(name))
         .map(serialize_builder_policy);
     validate_builder_policy(paths, &args)?;
-    run_nh(build_host_args(action, &args, builders_override.as_deref(), &system))
+    run_nh(build_host_args(
+        action,
+        &args,
+        builders_override.as_deref(),
+        &system,
+    ))
 }
 
 // Restores NIX_BUILDERS and NIX_CONFIG to their previous values on drop.

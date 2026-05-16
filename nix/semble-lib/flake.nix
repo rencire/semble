@@ -1,6 +1,5 @@
-{ lib, discovery, resolution }:
+{ lib, discovery, resolution, operatorSsh }:
 let
-  inherit (discovery) discoverProject;
   inherit (resolution) resolveHost resolveImage;
 in
 {
@@ -11,7 +10,8 @@ in
     ,
     }:
     let
-      project = discoverProject { inherit inputs root; };
+      project = discovery.loadRepo { inherit inputs root; };
+      repoSshArtifacts = operatorSsh.operatorSshArtifacts { repo = project; };
       buildHost = key: host:
         let
           resolved = resolveHost {
@@ -33,6 +33,8 @@ in
             inherit inputs;
             semble = {
               inherit project resolved;
+              repo = project;
+              operatorSshArtifacts = repoSshArtifacts;
             };
           } // extraSpecialArgs;
           modules = resolved.modules ++ [ (resolution.overlayModule overlays) ];
@@ -76,6 +78,7 @@ in
                 inherit (host) system;
                 type = host.type;
                 provisionTarget = host.provisionTarget or null;
+                operator = host.operator or { };
               }
           )
           project.hostsByKey;

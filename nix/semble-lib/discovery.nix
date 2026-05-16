@@ -25,7 +25,7 @@ let
     }:
     let
       raw = assertAttrset path (import path);
-      value = assertAllowedFields path [ "hostName" "system" "builder" "type" "provisionTarget" "profiles" "presets" "modules" "inputModules" "configFile" "configuration" ] raw;
+      value = assertAllowedFields path [ "hostName" "system" "builder" "type" "provisionTarget" "operator" "profiles" "presets" "modules" "inputModules" "configFile" "configuration" ] raw;
       hostName = assertString path "hostName" (value.hostName or (fileError path "missing required field `hostName`"));
       system = assertString path "system" (value.system or (fileError path "missing required field `system`"));
       builder = assertString path "builder" (
@@ -46,6 +46,7 @@ let
           assertString path "provisionTarget" value.provisionTarget
         else
           null;
+      operator = assertOptionalAttrset path "operator" (value.operator or { });
       _provisionCheck =
         assertCondition
           path
@@ -85,7 +86,7 @@ let
       };
       inherit hostName system builder profiles presets modules inputModules configuration configFile;
       type = hostType;
-      inherit provisionTarget;
+      inherit provisionTarget operator;
       configFileExplicit = value ? configFile;
     };
 
@@ -222,6 +223,7 @@ let
   discoverKind =
     { root
     , name
+    , dir ? root + "/${name}"
     , includeFile
     , normalize
     ,
@@ -229,21 +231,35 @@ let
     assertUniqueItems name (
       map normalize (
         collectTree {
-          dir = root + "/${name}";
+          inherit dir;
           inherit includeFile;
         }
       )
     );
 
-  discoverProject =
+  discoverRepo =
     { root
     , inputs
     ,
     }:
     let
+      sembleConfig =
+        if builtins.pathExists (root + "/semble.toml") then
+          builtins.fromTOML (builtins.readFile (root + "/semble.toml"))
+        else
+          { paths = { }; };
+      paths = {
+        hostsDir = root + "/${sembleConfig.paths.hosts_dir or "hosts"}";
+        sshHostKeysDir = root + "/${sembleConfig.paths.ssh_host_keys_dir or "ssh_host_keys"}";
+        diskKeysDir = root + "/${sembleConfig.paths.disk_keys_dir or "disk_keys"}";
+        hostTemplateDir = root + "/${sembleConfig.paths.host_template_dir or "hosts/_template"}";
+        sopsConfigFile = root + "/${sembleConfig.paths.sops_config_file or ".sops.yaml"}";
+        networkSecretsFile = root + "/${sembleConfig.paths.network_secrets_file or "secrets/network.yaml"}";
+      };
       hosts = discoverKind {
         inherit root;
         name = "hosts";
+        dir = paths.hostsDir;
         includeFile = fileName: relativePath:
           fileName == "default.nix" &&
           builtins.length (lib.splitString "/" relativePath) == 2;
@@ -275,7 +291,7 @@ let
       };
     in
     {
-      inherit root inputs hosts modules presets profiles images;
+      inherit root inputs paths hosts modules presets profiles images;
       hostsByKey = listToAttrsByKey hosts;
       modulesByKey = listToAttrsByKey modules;
       presetsByKey = listToAttrsByKey presets;
@@ -284,5 +300,6 @@ let
     };
 in
 {
-  inherit discoverProject;
+   inherit discoverRepo;
+   loadRepo = { root, inputs ? { } }: discoverRepo { inherit root inputs; };
 }

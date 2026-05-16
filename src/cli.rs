@@ -25,6 +25,7 @@ pub enum HostCommand {
     Create(NamedHostArgs),
     Delete(DeleteHostArgs),
     Keys(KeysArgs),
+    Ssh(SshArgs),
     Build(DelegatedHostArgs),
     Switch(DelegatedHostArgs),
     Provision(HostProvisionArgs),
@@ -71,6 +72,17 @@ pub struct DeleteHostArgs {
 pub struct KeysArgs {
     #[command(subcommand)]
     pub command: KeysCommand,
+}
+
+#[derive(Debug, Args)]
+pub struct SshArgs {
+    #[command(subcommand)]
+    pub command: SshCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SshCommand {
+    Generate,
 }
 
 #[derive(Debug, Subcommand)]
@@ -229,6 +241,7 @@ mod tests {
             ],
             vec!["semble", "host", "keys", "luks", "add", "atlas", "--force"],
             vec!["semble", "host", "keys", "luks", "delete", "atlas", "--yes"],
+            vec!["semble", "host", "ssh", "generate"],
         ];
 
         for args in cases {
@@ -366,5 +379,4 @@ mod tests {
         assert!(args.jump.is_none());
         assert!(args.identity.is_none());
     }
-
 }

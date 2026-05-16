@@ -219,6 +219,9 @@ Supported host fields:
   such as `nixos-raspberrypi.lib.nixosSystemFull`.
 - `provisionTarget`: Required for `type = "microvm"`. SSH destination used when
   provisioning the guest image on the parent machine.
+- `operator`: Optional operator SSH metadata. `role = "server"` contributes SSH
+  aliases to `semble host ssh generate`; `role = "client"` causes `semble host
+  build` and `semble host switch` to regenerate SSH artifacts first.
 - `profiles`: A list of profile keys to include.
 - `presets`: A list of preset keys to include directly.
 - `modules`: A list of local Semble module keys to include directly for this
