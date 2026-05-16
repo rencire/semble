@@ -250,7 +250,7 @@ let
           { paths = { }; };
       paths = {
         hostsDir = root + "/${sembleConfig.paths.hosts_dir or "hosts"}";
-        sshHostKeysDir = root + "/${sembleConfig.paths.ssh_host_keys_dir or "ssh_host_keys"}";
+        sshHostKeysDir = root + "/${sembleConfig.paths.ssh_host_keys_dir or "keys/ssh_host_keys"}";
         diskKeysDir = root + "/${sembleConfig.paths.disk_keys_dir or "disk_keys"}";
         hostTemplateDir = root + "/${sembleConfig.paths.host_template_dir or "hosts/_template"}";
         sopsConfigFile = root + "/${sembleConfig.paths.sops_config_file or ".sops.yaml"}";
