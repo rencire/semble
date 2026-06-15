@@ -13,8 +13,21 @@ let
   testInputs = {
     inherit nixpkgs;
     nix-darwin = {
-      lib.darwinSystem = _args: {
-        config.networking.hostName = "apollo";
+      lib.darwinSystem = args: {
+        config = (lib.evalModules {
+          modules = args.modules ++ [
+            {
+              options = {
+                environment.variables = lib.mkOption {
+                  type = lib.types.attrsOf lib.types.str;
+                  default = { };
+                };
+                networking.hostName = lib.mkOption { type = lib.types.str; };
+              };
+            }
+          ];
+          specialArgs = args.specialArgs or { };
+        }).config;
       };
     };
     fake = {
@@ -38,6 +51,9 @@ let
       };
       nixosModules.secrets = { ... }: {
         environment.variables.FAKE_INPUT = "enabled";
+      };
+      darwinModules.darwin = { ... }: {
+        environment.variables.FAKE_DARWIN = "enabled";
       };
     };
   };
@@ -165,6 +181,7 @@ in
   darwinHostInDarwinConfigurations = assert (flake ? darwinConfigurations && flake.darwinConfigurations ? apollo); true;
   darwinHostNotInNixosConfigurations = assert (!(flake.nixosConfigurations ? apollo)); true;
   darwinHostConfigApplies = assert (apolloConfig.networking.hostName == "apollo"); true;
+  darwinInputModulesApply = assert (apolloConfig.environment.variables.FAKE_DARWIN == "enabled"); true;
   hostDepthFilterExcludesNested = assert (!(project.hostsByKey ? "apollo.nested")); true;
   unknownPresetFails = expectFailure unknownPresetRoot;
   missingConfigFails = expectFailure missingConfigRoot;

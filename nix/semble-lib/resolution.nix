@@ -18,6 +18,7 @@ let
     { inputs
     , file
     , ref
+    , system
     ,
     }:
     let
@@ -25,21 +26,22 @@ let
       _ = assertCondition file (builtins.length parts >= 2) "input reference `${ref}` must be `<input>.<module>`";
       inputName = builtins.head parts;
       moduleName = joinDot (lib.tail parts);
+      moduleSetName = if lib.hasSuffix "-darwin" system then "darwinModules" else "nixosModules";
       input =
         if builtins.hasAttr inputName inputs then
           builtins.getAttr inputName inputs
         else
           fileError file "unknown input `${inputName}` referenced by `${ref}`";
       modules =
-        if input ? nixosModules then
-          input.nixosModules
+        if builtins.hasAttr moduleSetName input then
+          builtins.getAttr moduleSetName input
         else
-          fileError file "input `${inputName}` does not expose `nixosModules`";
+          fileError file "input `${inputName}` does not expose `${moduleSetName}`";
     in
     if builtins.hasAttr moduleName modules then
       builtins.getAttr moduleName modules
     else
-      fileError file "input `${inputName}` does not expose nixosModules.${moduleName}";
+      fileError file "input `${inputName}` does not expose ${moduleSetName}.${moduleName}";
 
   resolveBuilderRef =
     { inputs
@@ -107,6 +109,7 @@ let
   makeSembleModule =
     { moduleDef
     , inputs
+    , system
     , inputRefs ? moduleDef.inputs
     ,
     }:
@@ -128,7 +131,7 @@ let
     {
       imports = map
         (ref: resolveInputRef {
-          inherit inputs ref;
+          inherit inputs ref system;
           file = moduleDef.file;
         })
         inputRefs;
@@ -361,6 +364,7 @@ let
         map
           (modulePlan: makeSembleModule {
             inherit (modulePlan) moduleDef inputRefs;
+            inherit (host) system;
             inherit (project) inputs;
           })
           modulePlans
@@ -371,6 +375,7 @@ let
               inputs = project.inputs;
               file = host.file;
               ref = selection.key;
+              inherit (host) system;
             }
           )
           explicitInputSelections.ordered
@@ -447,6 +452,7 @@ let
         map
           (modulePlan: makeSembleModule {
             inherit (modulePlan) moduleDef inputRefs;
+            system = resolvedHost.host.system;
             inherit (project) inputs;
           })
           imageModulePlans
@@ -457,6 +463,7 @@ let
               inputs = project.inputs;
               file = image.file;
               ref = selection.key;
+              system = resolvedHost.host.system;
             }
           )
           explicitImageInputSelections.ordered
