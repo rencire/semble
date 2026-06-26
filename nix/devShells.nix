@@ -18,10 +18,13 @@ in
     in
     {
       packages = with pkgs; [
+        coreutils
+        e2fsprogs
         entire
         configured.opencode
         llm-agents.codex
         git
+        util-linux
         cargo
         clippy
         rustc
