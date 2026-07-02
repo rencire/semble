@@ -56,7 +56,7 @@ Extra args are forwarded to the underlying Nix build invocation.
 
 | Flag | Purpose |
 |------|---------|
-| `--builder-policy <policy>` | Pin the build to a named remote builder defined in `semble.toml`. See [builder-policies.md](./builder-policies.md). |
+| `--builder-policy <policy>` | Apply a named builder policy defined in `semble.toml`. See [builder-policies.md](./builder-policies.md). |
 
 ## semble host switch
 
@@ -79,7 +79,7 @@ Extra args are forwarded to the underlying deploy invocation.
 
 | Flag | Purpose |
 |------|---------|
-| `--builder-policy <policy>` | Pin the build to a named remote builder defined in `semble.toml`. See [builder-policies.md](./builder-policies.md). |
+| `--builder-policy <policy>` | Apply a named builder policy defined in `semble.toml`. See [builder-policies.md](./builder-policies.md). |
 
 ## Build then switch
 

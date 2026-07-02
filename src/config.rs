@@ -24,6 +24,20 @@ pub struct PathsConfig {
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct BuilderPolicyConfig {
     pub name: String,
+    #[serde(default)]
+    pub local: BuilderPolicyLocalConfig,
+    #[serde(default)]
+    pub builders: Vec<BuilderMachineConfig>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+pub struct BuilderPolicyLocalConfig {
+    #[serde(default)]
+    pub max_jobs: u32,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct BuilderMachineConfig {
     pub host: String,
     pub system: String,
     #[serde(default)]
@@ -80,5 +94,43 @@ network_secrets_file = "secrets/network.yaml"
 
         let config = SembleConfig::load(tempdir.path()).unwrap();
         assert!(config.builder_policies.is_empty());
+    }
+
+    #[test]
+    fn parses_nested_builder_policy_scheduling() {
+        let tempdir = tempdir().unwrap();
+        fs::write(
+            tempdir.path().join("semble.toml"),
+            r#"[paths]
+hosts_dir = "hosts"
+host_template_dir = "hosts/_template"
+default_host_template = "default"
+ssh_host_keys_dir = "ssh_host_keys"
+disk_keys_dir = "disk_keys"
+sops_config_file = ".sops.yaml"
+network_secrets_file = "secrets/network.yaml"
+
+[[builder_policies]]
+name = "thor-aarch64-builder-preferred"
+
+[builder_policies.local]
+max_jobs = 1
+
+[[builder_policies.builders]]
+host = "thor-builder"
+system = "aarch64-linux"
+ssh_key = "/etc/nix/ssh/homelab_builder"
+max_jobs = 6
+speed_factor = 20
+supported_features = ["benchmark", "big-parallel"]
+"#,
+        )
+        .unwrap();
+
+        let config = SembleConfig::load(tempdir.path()).unwrap();
+        let policy = &config.builder_policies[0];
+        assert_eq!(policy.local.max_jobs, 1);
+        assert_eq!(policy.builders[0].host, "thor-builder");
+        assert_eq!(policy.builders[0].max_jobs, 6);
     }
 }

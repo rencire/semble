@@ -576,6 +576,11 @@ network_secrets_file = "secrets/network.yaml"
 
 [[builder_policies]]
 name = "l380y"
+
+[builder_policies.local]
+max_jobs = 1
+
+[[builder_policies.builders]]
 host = "l380y-deploy"
 system = "x86_64-linux"
 max_jobs = 6
@@ -587,8 +592,9 @@ supported_features = ["benchmark", "big-parallel"]
 
         let paths = RepoPaths::new(tempdir.path()).unwrap();
         let policy = paths.builder_policy("l380y").unwrap();
-        assert_eq!(policy.host, "l380y-deploy");
-        assert_eq!(policy.system, "x86_64-linux");
+        assert_eq!(policy.local.max_jobs, 1);
+        assert_eq!(policy.builders[0].host, "l380y-deploy");
+        assert_eq!(policy.builders[0].system, "x86_64-linux");
     }
 
     #[test]

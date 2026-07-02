@@ -24,7 +24,7 @@ and the **target machine** receives the pre-built closure for installation.
 
 | Flag | Purpose |
 |------|---------|
-| `--builder-policy buildbox` | Pin the build to a specific remote builder (`buildbox`) defined in `semble.toml`. Without this, the Nix build would run locally on your laptop. |
+| `--builder-policy buildbox` | Apply the named builder policy (`buildbox`) defined in `semble.toml`. Without this, the Nix build uses ambient Nix builder configuration. |
 | `--target-host my-host-deploy` | SSH alias or address of the target machine's installer environment (the NixOS installer ISO running on the machine being provisioned). |
 | `--host-keys-dir ./ssh_host_keys/my-host` | Path to the host's SSH keys. `nixos-anywhere` injects these into the installed system so you can SSH in on first boot without manual key setup. |
 | `--disk-encryption-keys /tmp/luks-root.key ./secrets/disk_keys/my-host/luks-root.key` | Two paths: the remote path on the installer machine (where the key lands temporarily) and the local path in the repo. Required when the target uses LUKS-encrypted root. |

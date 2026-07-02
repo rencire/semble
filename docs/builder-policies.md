@@ -5,6 +5,21 @@ selection.
 
 It is a design note, not part of the current stable API contract.
 
+## Table Of Contents
+
+- [Problem](#problem)
+- [Goal](#goal)
+- [Non-Goals](#non-goals)
+- [Minimal CLI](#minimal-cli)
+- [Minimal `semble.toml` Shape](#minimal-sembletoml-shape)
+- [Policy Shape](#policy-shape)
+- [Field Meaning](#field-meaning)
+- [Why This Belongs In `semble.toml`](#why-this-belongs-in-sembletoml)
+- [Relationship To Host Nix Config](#relationship-to-host-nix-config)
+- [Validation Rules](#validation-rules)
+- [Operational Notes](#operational-notes)
+- [Deferred Questions](#deferred-questions)
+
 ## Problem
 
 Some deployments need a specific build machine for operational reasons that Nix
@@ -12,14 +27,14 @@ does not model directly. A common case is:
 
 - more than one builder is technically compatible with the requested `system`
 - one of those builders is operationally unsuitable for a given workload
-- the operator wants a short Semble flag rather than raw `NIX_BUILDERS` syntax
+- the operator wants a short Semble flag rather than raw Nix builder syntax
 
 Examples:
 
 - a Linux VM can build many `x86_64-linux` derivations, but a physical Linux
   host is required for one problematic package
-- the controller host should evaluate and orchestrate, but not participate as a
-  fallback builder for that invocation
+- the same-machine Nix daemon should evaluate and orchestrate, but not
+  participate as a fallback builder for that invocation
 
 ## Goal
 
@@ -57,7 +72,12 @@ not change the deployment target selected by flags such as `--target-host`.
 
 ```toml
 [[builder_policies]]
-name = "buildbox"
+name = "buildbox-builder-preferred"
+
+[builder_policies.local]
+max_jobs = 1
+
+[[builder_policies.builders]]
 host = "builder@buildbox.example.net"
 system = "x86_64-linux"
 ssh_key = "/etc/nix/ssh/buildbox_builder"
@@ -66,49 +86,53 @@ speed_factor = 1
 supported_features = ["benchmark", "big-parallel", "kvm", "nixos-test"]
 ```
 
-## First-Version Scope
+## Policy Shape
 
-The first version supports exactly one policy shape:
+The current policy shape has three roles:
 
-- the policy resolves to exactly one remote builder entry
-- Semble serializes that builder into Nix's builder override syntax
-- no other remote builders are injected for that invocation
+- `name`: CLI-facing policy identifier
+- `local`: same-machine Nix daemon scheduling for this invocation
+- `builders`: delegated Nix builder machine specs
 
-This first version is always strict:
+A strict builder-only policy sets or omits `local.max_jobs = 0`. A
+builder-preferred policy sets `local.max_jobs = 1` or another positive value.
 
-Operationally, the first version can implement this by setting both:
+Operationally, Semble translates the selected policy into standard Nix settings:
 
-- `NIX_BUILDERS=<serialized selected builder>`
-- `NIX_CONFIG=max-jobs = 0`
+- `builders = <serialized delegated builders>`
+- `max-jobs = <local.max_jobs>`
 
-In the first version, Semble should emit exactly one strict builder entry for
-the selected policy and should not expose additional builder-selection modes.
-
-Semble should not expose looser modes until there is a concrete need for them.
+For `nh` build and switch commands, Semble passes those values as command-line
+flags. For `nixos-anywhere` provision commands, Semble merges them into
+`NIX_CONFIG` so the internal `nix build` commands see the same policy.
 
 ## Field Meaning
 
 - `name`: CLI-facing policy identifier used by `--builder-policy`
-- `host`: SSH destination Semble should use when serializing the builder
-- `system`: Nix platform this builder should advertise
-- `ssh_key`: optional private key path to serialize into the builder entry
-- `max_jobs`: serialized builder job count
-- `speed_factor`: serialized builder weighting hint
-- `supported_features`: serialized Nix builder features
+- `local.max_jobs`: same-machine Nix daemon jobs for this invocation; defaults
+  to `0` when omitted
+- `builders[].host`: SSH destination Semble should use when serializing the
+  delegated builder
+- `builders[].system`: Nix platform this builder should advertise
+- `builders[].ssh_key`: optional private key path to serialize into the builder
+  entry
+- `builders[].max_jobs`: serialized delegated builder job count
+- `builders[].speed_factor`: serialized builder weighting hint
+- `builders[].supported_features`: serialized Nix builder features
 
-For the first version, `host` should already be a valid SSH destination string,
-suitably usable by the actual Nix remote-builder SSH path.
+`builders[].host` should already be a valid SSH destination string, suitably
+usable by the actual Nix remote-builder SSH path.
 
 In practice, builder policies are more robust when `host` is a real
 `user@hostname` destination instead of a shell-only SSH alias, because Nix's
 remote-builder transport may not resolve aliases from the same config context as
 an interactive user shell.
 
-`ssh_key` is optional. When present, Semble serializes it into Nix's builder
-entry so the delegated command does not have to rely on ambient `ssh-agent`
-state. This is especially useful on macOS multi-user Nix setups where remote
-builder SSH runs under the daemon/build-user context rather than the interactive
-user shell.
+`builders[].ssh_key` is optional. When present, Semble serializes it into Nix's
+builder entry so the delegated command does not have to rely on ambient
+`ssh-agent` state. This is especially useful on macOS multi-user Nix setups
+where delegated builder SSH runs under the daemon/build-user context rather than
+the interactive user shell.
 
 ## Why This Belongs In `semble.toml`
 
@@ -145,31 +169,30 @@ This allows a repo to:
 Semble should hard-error when:
 
 - `--builder-policy` names an unknown policy
-- a builder policy omits any required field
-- the selected builder cannot be used for the delegated build
+- a builder policy omits any required field or has no `builders[]` entries
+- a selected delegated builder cannot be used for the delegated build
 
 Semble should treat duplicate `builder_policies.name` values as invalid config.
 
-Semble should fail rather than silently falling back to local builds or other
-configured builders when a builder policy is selected.
+Semble should fail rather than silently falling back to same-machine builds or
+ambient machine-wide builders when a builder policy is selected.
 
 ## Operational Notes
 
-Builder policies only solve builder selection. The remote builder account still
-needs:
+Builder policies only solve builder selection. Each delegated builder account
+still needs:
 
 - an SSH-reachable account on the target machine
 - a non-interactive private key readable by the local Nix builder context
 - any required `trusted-users` or remote-build permissions on the target host
 
-For automated remote builds, a dedicated builder key without a passphrase is
+For automated delegated builds, a dedicated builder key without a passphrase is
 usually more reliable than reusing a human deploy key.
 
 ## Deferred Questions
 
 These are intentionally out of scope for the first version:
 
-- multiple builders in one policy
-- policy kinds such as pools, fallback chains, or feature-routed policies
 - deriving builder policy from host definitions instead of explicit TOML fields
 - adding a separate `--builder` shorthand
+- Semble-managed fallback chains or dynamic builder discovery

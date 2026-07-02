@@ -1,5 +1,5 @@
 use crate::cli::{DelegatedHostArgs, HostProvisionArgs, ProvisionArgs};
-use crate::config::BuilderPolicyConfig;
+use crate::config::{BuilderMachineConfig, BuilderPolicyConfig};
 use crate::microvm;
 use crate::repo::RepoPaths;
 use crate::repo::{load_host_provision_config, HostType};
@@ -22,6 +22,7 @@ pub fn build_host_args(
     action: &str,
     args: &DelegatedHostArgs,
     builders_override: Option<&str>,
+    builder_policy: Option<&BuilderPolicyConfig>,
     system: &str,
 ) -> Vec<OsString> {
     let mut delegated = vec![
@@ -35,7 +36,10 @@ pub fn build_host_args(
         delegated.push(OsString::from("--builders"));
         delegated.push(OsString::from(builders));
         delegated.push(OsString::from("--max-jobs"));
-        delegated.push(OsString::from("0"));
+        let local_max_jobs = builder_policy
+            .map(|policy| policy.local.max_jobs)
+            .unwrap_or(0);
+        delegated.push(OsString::from(local_max_jobs.to_string()));
     }
     delegated.extend(args.extra_args.iter().cloned());
     delegated
@@ -98,18 +102,27 @@ pub(crate) fn normalize_switch_args(args: DelegatedHostArgs) -> DelegatedHostArg
     }
 }
 
-fn serialize_builder_policy(policy: &BuilderPolicyConfig) -> String {
-    let ssh_key = policy.ssh_key.as_deref().unwrap_or("-");
-    let features = if policy.supported_features.is_empty() {
+fn serialize_builder_machine(builder: &BuilderMachineConfig) -> String {
+    let ssh_key = builder.ssh_key.as_deref().unwrap_or("-");
+    let features = if builder.supported_features.is_empty() {
         String::from("-")
     } else {
-        policy.supported_features.join(",")
+        builder.supported_features.join(",")
     };
 
     format!(
         "ssh://{} {} {} {} {} {}",
-        policy.host, policy.system, ssh_key, policy.max_jobs, policy.speed_factor, features
+        builder.host, builder.system, ssh_key, builder.max_jobs, builder.speed_factor, features
     )
+}
+
+fn serialize_builder_policy(policy: &BuilderPolicyConfig) -> String {
+    policy
+        .builders
+        .iter()
+        .map(serialize_builder_machine)
+        .collect::<Vec<_>>()
+        .join(" ; ")
 }
 
 fn merge_nix_config(existing: Option<&OsStr>, extra_line: &str) -> OsString {
@@ -124,17 +137,32 @@ fn merge_nix_config(existing: Option<&OsStr>, extra_line: &str) -> OsString {
     }
 }
 
+fn build_provision_nix_config(existing: Option<&OsStr>, policy: &BuilderPolicyConfig) -> OsString {
+    let extra = format!(
+        "builders = {}\nmax-jobs = {}",
+        serialize_builder_policy(policy),
+        policy.local.max_jobs
+    );
+    merge_nix_config(existing, &extra)
+}
+
 fn validate_builder_policy(paths: &RepoPaths, args: &DelegatedHostArgs) -> Result<()> {
     let Some(policy_name) = args.builder_policy.as_deref() else {
         return Ok(());
     };
 
-    paths.builder_policy(policy_name).ok_or_else(|| {
+    let policy = paths.builder_policy(policy_name).ok_or_else(|| {
         anyhow::anyhow!(
             "unknown builder policy `{policy_name}` in {}",
             paths.root().join("semble.toml").display()
         )
     })?;
+
+    if policy.builders.is_empty() {
+        return Err(anyhow::anyhow!(
+            "builder policy `{policy_name}` must define at least one `builders` entry"
+        ));
+    }
 
     if args.extra_args.iter().any(|arg| arg == "--builders") {
         return Err(anyhow::anyhow!(
@@ -167,54 +195,46 @@ fn run_nh(args: Vec<OsString>) -> Result<()> {
 fn run_nh_host(paths: &RepoPaths, action: &str, args: DelegatedHostArgs) -> Result<()> {
     let system = load_host_system(paths, &args.hostname)?;
     let args = normalize_builder_policy(args)?;
-    let builders_override = args
+    let builder_policy = args
         .builder_policy
         .as_deref()
-        .and_then(|name| paths.builder_policy(name))
-        .map(serialize_builder_policy);
+        .and_then(|name| paths.builder_policy(name));
+    let builders_override = builder_policy.map(serialize_builder_policy);
     validate_builder_policy(paths, &args)?;
     run_nh(build_host_args(
         action,
         &args,
         builders_override.as_deref(),
+        builder_policy,
         &system,
     ))
 }
 
-// Restores NIX_BUILDERS and NIX_CONFIG to their previous values on drop.
-struct ProvisionEnvGuard(Option<OsString>, Option<OsString>);
+// Restores NIX_CONFIG to its previous value on drop.
+struct ProvisionEnvGuard(Option<OsString>);
 
 impl Drop for ProvisionEnvGuard {
     fn drop(&mut self) {
         match &self.0 {
-            Some(value) => env::set_var("NIX_BUILDERS", value),
-            None => env::remove_var("NIX_BUILDERS"),
-        }
-        match &self.1 {
             Some(value) => env::set_var("NIX_CONFIG", value),
             None => env::remove_var("NIX_CONFIG"),
         }
     }
 }
 
-fn setup_provision_builder_env(
-    paths: &RepoPaths,
-    policy_name: &str,
-) -> Result<ProvisionEnvGuard> {
+fn setup_provision_builder_env(paths: &RepoPaths, policy_name: &str) -> Result<ProvisionEnvGuard> {
     let policy = paths.builder_policy(policy_name).ok_or_else(|| {
         anyhow::anyhow!(
             "unknown builder policy `{policy_name}` in {}",
             paths.root().join("semble.toml").display()
         )
     })?;
-    let prev_builders = env::var_os("NIX_BUILDERS");
     let prev_config = env::var_os("NIX_CONFIG");
-    env::set_var("NIX_BUILDERS", serialize_builder_policy(policy));
     env::set_var(
         "NIX_CONFIG",
-        merge_nix_config(prev_config.as_deref(), "max-jobs = 0"),
+        build_provision_nix_config(prev_config.as_deref(), policy),
     );
-    Ok(ProvisionEnvGuard(prev_builders, prev_config))
+    Ok(ProvisionEnvGuard(prev_config))
 }
 
 #[derive(Debug)]
@@ -317,8 +337,7 @@ fn prepare_host_keys(host_keys_dir: &str) -> Result<TempDir> {
 }
 
 fn run_nixos_anywhere(args: Vec<OsString>) -> Result<()> {
-    let binary =
-        env::var("NIXOS_ANYWHERE_BIN").unwrap_or_else(|_| String::from("nixos-anywhere"));
+    let binary = env::var("NIXOS_ANYWHERE_BIN").unwrap_or_else(|_| String::from("nixos-anywhere"));
     let status = Command::new(&binary)
         .args(&args)
         .stdin(Stdio::inherit())
@@ -430,19 +449,39 @@ fn run_microvm_host_provision(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_host_args, build_nixos_anywhere_args, merge_nix_config, normalize_builder_policy,
-        normalize_switch_args, parse_physical_provision_args, prepare_host_keys,
-        serialize_builder_policy,
+        build_host_args, build_nixos_anywhere_args, build_provision_nix_config, merge_nix_config,
+        normalize_builder_policy, normalize_switch_args, parse_physical_provision_args,
+        prepare_host_keys, serialize_builder_policy, validate_builder_policy,
     };
     use crate::cli::DelegatedHostArgs;
-    use crate::config::BuilderPolicyConfig;
+    use crate::config::{BuilderMachineConfig, BuilderPolicyConfig, BuilderPolicyLocalConfig};
+    use crate::repo::RepoPaths;
     use std::ffi::OsString;
+    use std::fs;
+    use tempfile::tempdir;
 
     fn strings(values: &[OsString]) -> Vec<String> {
         values
             .iter()
             .map(|value| value.to_string_lossy().into_owned())
             .collect()
+    }
+
+    fn test_policy(local_max_jobs: u32) -> BuilderPolicyConfig {
+        BuilderPolicyConfig {
+            name: "l380y".into(),
+            local: BuilderPolicyLocalConfig {
+                max_jobs: local_max_jobs,
+            },
+            builders: vec![BuilderMachineConfig {
+                host: "l380y-deploy".into(),
+                ssh_key: None,
+                system: "x86_64-linux".into(),
+                max_jobs: 6,
+                speed_factor: 1,
+                supported_features: vec!["benchmark".into(), "big-parallel".into()],
+            }],
+        }
     }
 
     // --- nh arg construction ---
@@ -456,7 +495,7 @@ mod tests {
         };
 
         assert_eq!(
-            strings(&build_host_args("build", &args, None, "x86_64-linux")),
+            strings(&build_host_args("build", &args, None, None, "x86_64-linux")),
             vec!["os", "build", ".", "-H", "atlas", "--ask"]
         );
     }
@@ -470,7 +509,13 @@ mod tests {
         };
 
         assert_eq!(
-            strings(&build_host_args("switch", &args, None, "aarch64-darwin")),
+            strings(&build_host_args(
+                "switch",
+                &args,
+                None,
+                None,
+                "aarch64-darwin",
+            )),
             vec!["darwin", "switch", ".", "-H", "m1mbp", "--ask"]
         );
     }
@@ -484,7 +529,13 @@ mod tests {
         };
 
         assert_eq!(
-            strings(&build_host_args("switch", &args, None, "x86_64-linux")),
+            strings(&build_host_args(
+                "switch",
+                &args,
+                None,
+                None,
+                "x86_64-linux",
+            )),
             vec!["os", "switch", ".", "-H", "atlas", "--dry-run", "--ask"]
         );
     }
@@ -563,12 +614,14 @@ mod tests {
             builder_policy: Some(String::from("l380y")),
             extra_args: vec![OsString::from("--dry-run")],
         };
+        let policy = test_policy(0);
 
         assert_eq!(
             strings(&build_host_args(
                 "switch",
                 &args,
                 Some("ssh://l380y-deploy x86_64-linux - 6 1 benchmark,big-parallel"),
+                Some(&policy),
                 "x86_64-linux",
             )),
             vec![
@@ -587,16 +640,39 @@ mod tests {
     }
 
     #[test]
-    fn serializes_builder_policy_to_nix_builders_entry() {
-        let policy = BuilderPolicyConfig {
-            name: "l380y".into(),
-            host: "l380y-deploy".into(),
-            ssh_key: None,
-            system: "x86_64-linux".into(),
-            max_jobs: 6,
-            speed_factor: 1,
-            supported_features: vec!["benchmark".into(), "big-parallel".into()],
+    fn injects_builder_policy_local_max_jobs_for_host_args() {
+        let args = DelegatedHostArgs {
+            hostname: String::from("atlas"),
+            builder_policy: Some(String::from("l380y")),
+            extra_args: vec![],
         };
+        let policy = test_policy(1);
+
+        assert_eq!(
+            strings(&build_host_args(
+                "build",
+                &args,
+                Some("ssh://l380y-deploy x86_64-linux - 6 1 benchmark,big-parallel"),
+                Some(&policy),
+                "x86_64-linux",
+            )),
+            vec![
+                "os",
+                "build",
+                ".",
+                "-H",
+                "atlas",
+                "--builders",
+                "ssh://l380y-deploy x86_64-linux - 6 1 benchmark,big-parallel",
+                "--max-jobs",
+                "1",
+            ]
+        );
+    }
+
+    #[test]
+    fn serializes_builder_policy_to_nix_builders_entry() {
+        let policy = test_policy(0);
 
         assert_eq!(
             serialize_builder_policy(&policy),
@@ -605,20 +681,41 @@ mod tests {
     }
 
     #[test]
+    fn serializes_multiple_builders_to_nix_builders_setting() {
+        let mut policy = test_policy(0);
+        policy.builders.push(BuilderMachineConfig {
+            host: "backup-builder".into(),
+            ssh_key: Some("/etc/nix/ssh/backup".into()),
+            system: "x86_64-linux".into(),
+            max_jobs: 2,
+            speed_factor: 5,
+            supported_features: vec!["big-parallel".into()],
+        });
+
+        assert_eq!(
+            serialize_builder_policy(&policy),
+            "ssh://l380y-deploy x86_64-linux - 6 1 benchmark,big-parallel ; ssh://backup-builder x86_64-linux /etc/nix/ssh/backup 2 5 big-parallel"
+        );
+    }
+
+    #[test]
     fn serializes_builder_policy_with_explicit_ssh_key() {
         let policy = BuilderPolicyConfig {
             name: "l380y".into(),
-            host: "deploy@l380y.baiji-carat.ts.net".into(),
-            ssh_key: Some("/Users/ren/.ssh/homelab_deploy".into()),
-            system: "x86_64-linux".into(),
-            max_jobs: 6,
-            speed_factor: 1,
-            supported_features: vec!["benchmark".into(), "big-parallel".into()],
+            local: BuilderPolicyLocalConfig { max_jobs: 0 },
+            builders: vec![BuilderMachineConfig {
+                host: "deploy@l380y.baiji-carat.ts.net".into(),
+                ssh_key: Some("/etc/nix/ssh/homelab_deploy".into()),
+                system: "x86_64-linux".into(),
+                max_jobs: 6,
+                speed_factor: 1,
+                supported_features: vec!["benchmark".into(), "big-parallel".into()],
+            }],
         };
 
         assert_eq!(
             serialize_builder_policy(&policy),
-            "ssh://deploy@l380y.baiji-carat.ts.net x86_64-linux /Users/ren/.ssh/homelab_deploy 6 1 benchmark,big-parallel"
+            "ssh://deploy@l380y.baiji-carat.ts.net x86_64-linux /etc/nix/ssh/homelab_deploy 6 1 benchmark,big-parallel"
         );
     }
 
@@ -629,6 +726,31 @@ mod tests {
         assert_eq!(
             merged.to_string_lossy(),
             "accept-flake-config = true\nmax-jobs = 0"
+        );
+    }
+
+    #[test]
+    fn builds_provision_nix_config_with_builders_and_local_max_jobs() {
+        let policy = test_policy(1);
+
+        let merged = build_provision_nix_config(None, &policy);
+
+        assert_eq!(
+            merged.to_string_lossy(),
+            "builders = ssh://l380y-deploy x86_64-linux - 6 1 benchmark,big-parallel\nmax-jobs = 1"
+        );
+    }
+
+    #[test]
+    fn provision_nix_config_preserves_existing_lines() {
+        let existing = OsString::from("accept-flake-config = true");
+        let policy = test_policy(0);
+
+        let merged = build_provision_nix_config(Some(existing.as_os_str()), &policy);
+
+        assert_eq!(
+            merged.to_string_lossy(),
+            "accept-flake-config = true\nbuilders = ssh://l380y-deploy x86_64-linux - 6 1 benchmark,big-parallel\nmax-jobs = 0"
         );
     }
 
@@ -664,6 +786,38 @@ mod tests {
 
         let error = normalize_builder_policy(args).unwrap_err();
         assert!(error.to_string().contains("provided more than once"));
+    }
+
+    #[test]
+    fn rejects_builder_policy_without_builders() {
+        let tempdir = tempdir().unwrap();
+        fs::write(
+            tempdir.path().join("semble.toml"),
+            r#"
+[paths]
+hosts_dir = "hosts"
+host_template_dir = "hosts/_template"
+default_host_template = "default"
+ssh_host_keys_dir = "ssh_host_keys"
+disk_keys_dir = "disk_keys"
+sops_config_file = ".sops.yaml"
+network_secrets_file = "secrets/network.yaml"
+
+[[builder_policies]]
+name = "empty"
+"#,
+        )
+        .unwrap();
+        let paths = RepoPaths::new(tempdir.path()).unwrap();
+        let args = DelegatedHostArgs {
+            hostname: String::from("thor"),
+            builder_policy: Some(String::from("empty")),
+            extra_args: vec![],
+        };
+
+        let error = validate_builder_policy(&paths, &args).unwrap_err();
+
+        assert!(error.to_string().contains("at least one `builders` entry"));
     }
 
     // --- parse_physical_provision_args ---
@@ -824,8 +978,16 @@ mod tests {
         let src = TempDir::new().unwrap();
         fs::write(src.path().join("ssh_host_ed25519_key"), "private").unwrap();
         fs::write(src.path().join("ssh_host_ed25519_key.pub"), "public").unwrap();
-        fs::write(src.path().join("ssh_host_initrd_ed25519_key"), "initrd-private").unwrap();
-        fs::write(src.path().join("ssh_host_initrd_ed25519_key.pub"), "initrd-public").unwrap();
+        fs::write(
+            src.path().join("ssh_host_initrd_ed25519_key"),
+            "initrd-private",
+        )
+        .unwrap();
+        fs::write(
+            src.path().join("ssh_host_initrd_ed25519_key.pub"),
+            "initrd-public",
+        )
+        .unwrap();
 
         let result = prepare_host_keys(src.path().to_str().unwrap()).unwrap();
         let ssh_dir = result.path().join("etc/ssh");
@@ -852,8 +1014,16 @@ mod tests {
         let src = TempDir::new().unwrap();
         fs::write(src.path().join("ssh_host_ed25519_key"), "private").unwrap();
         fs::write(src.path().join("ssh_host_ed25519_key.pub"), "public").unwrap();
-        fs::write(src.path().join("ssh_host_initrd_ed25519_key"), "initrd-private").unwrap();
-        fs::write(src.path().join("ssh_host_initrd_ed25519_key.pub"), "initrd-public").unwrap();
+        fs::write(
+            src.path().join("ssh_host_initrd_ed25519_key"),
+            "initrd-private",
+        )
+        .unwrap();
+        fs::write(
+            src.path().join("ssh_host_initrd_ed25519_key.pub"),
+            "initrd-public",
+        )
+        .unwrap();
 
         let result = prepare_host_keys(src.path().to_str().unwrap()).unwrap();
         let ssh_dir = result.path().join("etc/ssh");
