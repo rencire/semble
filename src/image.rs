@@ -200,7 +200,18 @@ fn normalize_artifact_to_raw(artifact: &Path, raw_img: &Path) -> Result<()> {
             .map(|_| ())
             .with_context(|| format!("failed to copy image artifact to {}", raw_img.display())),
         _ => bail!("unsupported image format: {}", artifact.display()),
+    }?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        // The raw image becomes a temporary container for injected private keys.
+        fs::set_permissions(raw_img, fs::Permissions::from_mode(0o600))
+            .with_context(|| format!("failed to make raw image writable: {}", raw_img.display()))?;
     }
+
+    Ok(())
 }
 
 fn inject_host_keys(
@@ -778,7 +789,7 @@ mod tests {
     use super::{
         darwin_raw_device_path, debugfs_host_key_commands, extract_partition, find_built_artifact,
         find_ext_partition_by_label, inject_host_keys_debugfs, injection_backend_for_os,
-        parse_partition_table, resolve_prepare_config, resolve_prepare_config_with,
+        normalize_artifact_to_raw, parse_partition_table, resolve_prepare_config, resolve_prepare_config_with,
         run_command_capture, splice_partition, validate_prepare_inputs, HostKeyInjectionBackend,
     };
     use crate::cli::PrepareImageArgs;
@@ -786,6 +797,8 @@ mod tests {
     use anyhow::anyhow;
     use std::fs;
     use std::io::Write;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
     use std::process::{Command, Stdio};
     use tempfile::tempdir;
 
@@ -963,6 +976,20 @@ network_secrets_file = "secrets/network.yaml"
 
         let artifact = find_built_artifact(&tempdir.path().join("result")).unwrap();
         assert!(artifact.ends_with("disk.img.zst"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn normalize_raw_image_makes_copy_private_and_writable() {
+        let tempdir = tempdir().unwrap();
+        let artifact = tempdir.path().join("disk.img");
+        let raw_img = tempdir.path().join("prepared.img");
+        fs::write(&artifact, b"raw image").unwrap();
+        fs::set_permissions(&artifact, fs::Permissions::from_mode(0o444)).unwrap();
+
+        normalize_artifact_to_raw(&artifact, &raw_img).unwrap();
+
+        assert_eq!(fs::metadata(&raw_img).unwrap().permissions().mode() & 0o777, 0o600);
     }
 
     #[test]
