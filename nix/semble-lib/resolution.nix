@@ -113,7 +113,7 @@ let
     , inputRefs ? moduleDef.inputs
     ,
     }:
-    args@{ config, ... }:
+    args@{ config, pkgs, ... }:
     let
       namespacePath = [ "sb" ] ++ lib.splitString "." moduleDef.key;
       cfg = lib.attrByPath namespacePath { } config;

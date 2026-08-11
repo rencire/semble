@@ -139,11 +139,11 @@ let
 in
 {
   discoveredHosts = assert (builtins.attrNames project.hostsByKey == [ "apollo" "atlas" "beacon" "cedar" ]); true;
-  discoveredModules = assert (builtins.attrNames project.modulesByKey == [ "branding" "extra" "security.sops" ]); true;
+  discoveredModules = assert (builtins.attrNames project.modulesByKey == [ "branding" "extra" "package-marker" "security.sops" ]); true;
   discoveredPresets = assert (builtins.attrNames project.presetsByKey == [ "base" "security.sopsDefault" ]); true;
   discoveredImages = assert (builtins.attrNames project.imagesByKey == [ "installer" ]); true;
   presetResolution = assert (map (preset: preset.key) resolved.presetDefs == [ "base" "security.sopsDefault" ]); true;
-  moduleResolution = assert (map (moduleDef: moduleDef.key) resolved.moduleDefs == [ "branding" "security.sops" "extra" ]); true;
+  moduleResolution = assert (map (moduleDef: moduleDef.key) resolved.moduleDefs == [ "branding" "security.sops" "extra" "package-marker" ]); true;
   imageResolution = assert (resolvedImage.image.sourceHost == "atlas"); true;
   imageModuleResolution = assert (map (moduleDef: moduleDef.key) resolvedImage.moduleDefs == [ "extra" ]); true;
   imageInputResolution = assert (map (selection: selection.key) resolvedImage.explicitInputSelections == [ "fake.direct" ]); true;
@@ -166,6 +166,7 @@ in
       (pkg: (pkg.pname or pkg.name or "") == "overlay-marker")
       hostConfigWithOverlay.environment.systemPackages
   ); true;
+  moduleCallbacksReceiveOverlayPackages = assert (hostConfigWithOverlay.environment.variables.PACKAGE_MARKER == "overlay-marker"); true;
   customHostBuilderApplies = assert (cedarConfig.environment.variables.FAKE_SYSTEM_BUILDER == "nixosSystemFull"); true;
   imageInlineConfigurationApplies = assert (installerConfig.environment.variables.IMAGE_INLINE == "enabled"); true;
   imageConfigFileApplies = assert (installerConfig.environment.variables.IMAGE_FILE == "enabled"); true;

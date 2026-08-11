@@ -4,7 +4,7 @@
   type = "physical";
 
   profiles = [ "core" ];
-  modules = [ "extra" ];
+  modules = [ "extra" "package-marker" ];
   inputModules = [ "fake.direct" ];
   configuration = {
     environment.variables.SEMBLE_INLINE = "from-inline";
